@@ -30,15 +30,50 @@ And the local runtime log:
 tail -n 100 ~/.local/state/hermeskey/hermeskey.log
 ```
 
-## The wrong microphone is used
+## No audio captured
 
-List sources:
+Check if the configured recording source exists and test recording manually:
 
 ```bash
+# Check if configured source exists
+pactl list short sources | grep -i "$RECORD_SOURCE"
+
+# List all available sources
+pactl list short sources
+
+# Test recording manually (record 5 seconds to test.wav)
+ffmpeg -f pulse -i "$RECORD_SOURCE" -t 5 test.wav
+```
+
+## The wrong microphone is used
+
+Find your microphone's exact source name and update the configuration:
+
+```bash
+# List all sources with details
+pactl list sources | grep -A 10 "name"
+
+# Or view a compact list
 pactl list short sources
 ```
 
-Then set `RECORD_SOURCE` in `~/.config/hermeskey/hermeskey.env`.
+Then set `RECORD_SOURCE` in `~/.config/hermeskey/hermeskey.env`:
+
+```bash
+# Edit config
+nano ~/.config/hermeskey/hermeskey.env
+# Set RECORD_SOURCE=exact-source-name
+```
+
+## Permission denied / audio access issues
+
+Check PulseAudio permissions and active audio inputs:
+
+```bash
+# Check active PulseAudio inputs
+pactl list sink-inputs
+```
+
 
 ## The overlay is distracting
 
