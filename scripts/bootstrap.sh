@@ -5,6 +5,7 @@ REPO="graygarbage/HermesKey"
 API_URL="https://api.github.com/repos/$REPO/releases/latest"
 MAIN_TARBALL_URL="https://github.com/$REPO/archive/refs/heads/main.tar.gz"
 CHANNEL="release"
+LOCAL_SOURCE=0
 VENV_DIR="${HERMESKEY_VENV:-$HOME/venvs/stt}"
 SKIP_VENV="${HERMESKEY_SKIP_VENV:-0}"
 
@@ -41,10 +42,11 @@ usage() {
 HermesKey bootstrap installer
 
 Usage:
-  bash bootstrap.sh [--main] [--skip-venv]
+  bash bootstrap.sh [--main | --local] [--skip-venv]
 
 Options:
   --main       install from the current main branch instead of the latest release
+  --local      install from this checkout (for testing a PR)
   --skip-venv  skip Python venv creation and pip install
 EOF
 }
@@ -53,6 +55,9 @@ for arg in "$@"; do
   case "$arg" in
     --main)
       CHANNEL="main"
+      ;;
+    --local)
+      LOCAL_SOURCE=1
       ;;
     --skip-venv)
       SKIP_VENV=1
@@ -72,10 +77,12 @@ need_cmd() {
 }
 
 need_cmd bash
-need_cmd curl
-need_cmd tar
-need_cmd mktemp
 need_cmd python3
+if [[ "$LOCAL_SOURCE" == 0 ]]; then
+  need_cmd curl
+  need_cmd tar
+  need_cmd mktemp
+fi
 
 latest_asset_url() {
   local json
@@ -129,33 +136,48 @@ setup_python_env() {
 
 banner
 
-TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
-
-ARCHIVE_URL="$(download_url)"
-ARCHIVE_PATH="$TMP_DIR/hermeskey.tar.gz"
-EXTRACT_DIR="$TMP_DIR/extract"
-
-step "Downloading HermesKey"
-say "Source: $ARCHIVE_URL"
-curl -fsSL "$ARCHIVE_URL" -o "$ARCHIVE_PATH"
-mkdir -p "$EXTRACT_DIR"
-tar -xzf "$ARCHIVE_PATH" -C "$EXTRACT_DIR"
-
-if [[ -f "$EXTRACT_DIR/install.sh" ]]; then
-  ROOT="$EXTRACT_DIR"
+if [[ "$LOCAL_SOURCE" == 1 ]]; then
+  ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+  step "Using checkout at $ROOT"
 else
-  ROOT="$(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+  TMP_DIR="$(mktemp -d)"
+  trap 'rm -rf "$TMP_DIR"' EXIT
+
+  ARCHIVE_URL="$(download_url)"
+  ARCHIVE_PATH="$TMP_DIR/hermeskey.tar.gz"
+  EXTRACT_DIR="$TMP_DIR/extract"
+
+  step "Downloading HermesKey"
+  say "Source: $ARCHIVE_URL"
+  curl -fsSL "$ARCHIVE_URL" -o "$ARCHIVE_PATH"
+  mkdir -p "$EXTRACT_DIR"
+  tar -xzf "$ARCHIVE_PATH" -C "$EXTRACT_DIR"
+
+  if [[ -f "$EXTRACT_DIR/install.sh" ]]; then
+    ROOT="$EXTRACT_DIR"
+  else
+    ROOT="$(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+  fi
+  [[ -n "${ROOT:-}" && -f "$ROOT/install.sh" ]] || fail "Could not find install.sh in extracted archive."
+  ok "Archive extracted"
 fi
-
-[[ -n "${ROOT:-}" && -f "$ROOT/install.sh" ]] || fail "Could not find install.sh in extracted archive."
-
-ok "Archive extracted"
+step "Checking system dependencies and desktop access"
+bash "$ROOT/scripts/preflight.sh"
 setup_python_env
+step "Checking preserved speech configuration"
+bash "$ROOT/scripts/check-config.sh" "$VENV_DIR"
 
 step "Running HermesKey installer"
 chmod +x "$ROOT/install.sh"
 HERMESKEY_INSTALL_CONTEXT=bootstrap HERMESKEY_VENV="$VENV_DIR" bash "$ROOT/install.sh"
+
+step "Waiting for model and verifying transcription"
+if ! python3 "$ROOT/scripts/verify-install.py" \
+  --socket "${HERMESKEY_SMOKE_SOCKET:-${XDG_RUNTIME_DIR:-/tmp}/hermeskey.sock}" \
+  --model-timeout "${HERMESKEY_MODEL_TIMEOUT:-600}" \
+  --smoke-timeout "${HERMESKEY_SMOKE_TIMEOUT:-180}"; then
+  fail "HermesKey files were installed, but runtime validation failed. See errors above and run hermeskey-doctor."
+fi
 
 ok "HermesKey bootstrap complete"
 say

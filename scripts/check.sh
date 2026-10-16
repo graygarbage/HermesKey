@@ -18,13 +18,17 @@ echo "Shell syntax (${#shell_scripts[@]} scripts)"
 bash -n "${shell_scripts[@]}"
 
 echo "Python syntax"
-python3 -m py_compile bin/hermeskey-server.py bin/hermeskey-overlay.py
+python3 -m py_compile bin/hermeskey-server.py bin/hermeskey-overlay.py scripts/verify-install.py
+python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "systemd units"
 systemd-analyze --user verify systemd/user/hermeskey.service systemd/user/hermeskey-ydotoold.service
 
 echo "Hotkey concurrency"
 bash scripts/test-toggle-lock.sh
+
+echo "Preserved config"
+bash scripts/test-check-config.sh
 
 if command -v shellcheck >/dev/null 2>&1; then
   echo "shellcheck"
