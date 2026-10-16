@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=HermesKey Settings
+Comment=Open the HermesKey settings window (preview)
+Exec=@BIN_DEST@/hermeskey-settings.py
+Icon=hermeskey
+Terminal=false
+Categories=Settings;
+Keywords=speech;dictation;whisper;settings;

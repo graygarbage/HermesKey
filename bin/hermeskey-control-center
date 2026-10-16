@@ -6,6 +6,7 @@ show_menu_kdialog() {
     status "Show runtime status" \
     doctor "Run diagnostics" \
     config "Open config file" \
+    settings "Settings window (preview)" \
     logs "View logs" \
     restart "Restart services"
 }
@@ -20,6 +21,7 @@ show_menu_zenity() {
     status "Show runtime status" \
     doctor "Run diagnostics" \
     config "Open config file" \
+    settings "Settings window (preview)" \
     logs "View logs" \
     restart "Restart services"
 }
@@ -29,6 +31,7 @@ run_action() {
     status) exec hermeskey-desktop-status ;;
     doctor) exec hermeskey-desktop-doctor ;;
     config) exec hermeskey-open-config ;;
+    settings) exec hermeskey-settings.py ;;
     logs) exec hermeskey-open-logs ;;
     restart) exec hermeskey-restart-services ;;
     *) exit 1 ;;
@@ -55,6 +58,7 @@ Available actions:
   hermeskey-desktop-status
   hermeskey-desktop-doctor
   hermeskey-open-config
+  hermeskey-settings.py
   hermeskey-open-logs
   hermeskey-restart-services
 EOF
