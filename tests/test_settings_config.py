@@ -24,12 +24,21 @@ class SettingsConfigTests(unittest.TestCase):
 
     def test_change_only_requested_keys_preserving_all_else(self):
         doc = ConfigDocument(self.path)
-        self.assertEqual(doc.values, {"MODEL": "medium", "STT_LANG": "en"})
+        self.assertEqual(doc.values, {"MODEL": "medium", "STT_LANG": "en", "RECORD_SOURCE": "default"})
         doc.save({"MODEL": "small.en", "STT_LANG": ""}, lambda candidate: None)
         self.assertEqual(self.path.read_text(), self.text.replace("MODEL='medium'", "MODEL=small.en").replace("STT_LANG=en", "STT_LANG="))
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
         self.assertEqual(doc.values["MODEL"], "small.en")
         self.assertFalse(list(self.path.parent.glob(".hermeskey-env-*")))
+
+    def test_source_change_only_updates_source_and_preserves_comments(self):
+        self.path.write_text(self.text + "RECORD_SOURCE='default'  # chosen input\n")
+        doc = ConfigDocument(self.path)
+        doc.save({"RECORD_SOURCE": "alsa_input.usb-Device_1"}, lambda candidate: None)
+        self.assertIn("RECORD_SOURCE=alsa_input.usb-Device_1  # chosen input\n", self.path.read_text())
+        self.assertIn("MODEL='medium'  # current model", self.path.read_text())
+        with self.assertRaises(ConfigError):
+            doc.render({"RECORD_SOURCE": "source;touch /tmp/unsafe"})
 
     def test_validator_failure_leaves_file_unchanged(self):
         def reject(_candidate):

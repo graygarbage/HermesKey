@@ -25,6 +25,7 @@ rm -f \
   "$BIN_DEST/hermeskey-control-center" \
   "$BIN_DEST/hermeskey-settings.py" \
   "$BIN_DEST/hermeskey_settings_config.py" \
+  "$BIN_DEST/hermeskey_audio_sources.py" \
   "$BIN_DEST/ptt_stt_toggle.sh" \
   "$BIN_DEST/ptt_stt_server.py" \
   "$BIN_DEST/ptt_stt_overlay.py" \

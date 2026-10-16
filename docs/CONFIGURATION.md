@@ -6,7 +6,7 @@ HermesKey reads configuration from:
 ~/.config/hermeskey/hermeskey.env
 ```
 
-The installer copies a starter file there on first install. The Settings GUI can load and save `MODEL` and `STT_LANG` only; it leaves other lines, comments, and unknown settings untouched. It supports simple literal model IDs/paths without spaces or shell syntax. Configurations with duplicate or complex `MODEL` / `STT_LANG` assignments must be edited manually. Saves are validated, atomic, and made owner-only (mode `0600`); if the file changed since opening Settings, reload instead of overwriting someone else's edit. No backups or values are written to logs. Other fields still use the Config launcher.
+The installer copies a starter file there on first install. The Settings GUI can load and save `MODEL`, `STT_LANG` and `RECORD_SOURCE` only; it leaves other lines, comments, and unknown settings untouched. It supports simple literal model IDs/paths without spaces or shell syntax. Configurations with duplicate or complex `MODEL` / `STT_LANG` assignments must be edited manually. Saves are validated, atomic, and made owner-only (mode `0600`); if the file changed since opening Settings, reload instead of overwriting someone else's edit. No backups or values are written to logs. Other fields still use the Config launcher.
 
 After changing settings, run `hermeskey-doctor --config-only` (or `hermeskey-doctor`) to check model/language settings, insertion modes, flags, and numeric options before restarting the services. Invalid settings cause a nonzero exit status; unknown model aliases and custom Hugging Face IDs/paths are warnings because they cannot be verified offline. A valid model name is not a guarantee that its download will succeed. `MODEL` and `STT_LANG` changes need a restart of `hermeskey.service`, which the GUI offers after saving but never performs without permission. The GUI targets `~/.config/hermeskey/hermeskey.env` even if `XDG_CONFIG_HOME` or `HERMESKEY_CONFIG` is set, because the systemd service currently hard-codes that path.
 
@@ -20,7 +20,7 @@ RECORD_SOURCE=default
 
 - `MODEL`: any supported `faster-whisper` model name
 - `STT_LANG`: spoken language code supported by faster-whisper; set empty for auto-detect (e.g. `en`, `zh`, `haw` or `yue`)
-- `RECORD_SOURCE`: `default` follows the desktop's default input; to pin a specific mic, use a name from `pactl list short sources`
+- `RECORD_SOURCE`: `default` follows the desktop's default input; the Settings microphone picker displays friendly descriptions and saves the source's internal name (not its transient numeric index). Monitor sources are hidden unless requested. An unplugged saved device stays selected and is shown as unavailable. Changing only the microphone does not restart the speech service; the next recording uses the new source.
 
 ## Insertion behavior
 
