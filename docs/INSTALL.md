@@ -89,6 +89,8 @@ To install from the current `main` branch instead of the latest release:
 curl -fsSL https://raw.githubusercontent.com/graygarbage/HermesKey/main/scripts/bootstrap.sh | bash -s -- --main
 ```
 
+To test an unmerged PR with the same bootstrap checks and smoke test, check it out locally and run `bash scripts/bootstrap.sh --local` from the checkout. The normal `curl` command does **not** use the checkout; it downloads the latest published release. `--local` only skips the download/extraction step. If you previously installed HermesKey, confirm `~/.config/hermeskey/hermeskey.env` does not point `PYTHON_STT` at a removed venv; the installer preserves existing configuration.
+
 To skip Python environment setup because you are managing it yourself:
 
 ```bash
