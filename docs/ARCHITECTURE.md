@@ -18,6 +18,14 @@ Responsibilities:
 
 This layer is intentionally a shell script because it is easy to debug in a live desktop environment.
 
+Hotkey invocations are serialized with a nonblocking per-user `flock` lock.
+The lock covers starting/stopping the recorder, transcription, and inserting
+the result. A press while one of those transitions is in progress is ignored
+(with a notification); it is not queued, since a queued press could immediately
+stop a recording that just started. Once recording has started, the lock is
+released so the next press can stop it. The recorder and speech server do not
+inherit the lock.
+
 ## 2. Speech server
 
 `bin/hermeskey-server.py`

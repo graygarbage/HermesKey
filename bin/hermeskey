@@ -36,6 +36,8 @@ OVERLAY_STATE="${OVERLAY_STATE:-$RUNTIME_DIR/hermeskey_overlay.pid}"
 SOCK="${SOCK:-$RUNTIME_DIR/hermeskey.sock}"
 SERVER_PID="${SERVER_PID:-$RUNTIME_DIR/hermeskey_server.pid}"
 TARGET_STATE="${TARGET_STATE:-$RUNTIME_DIR/hermeskey_target.env}"
+# Keep the lock in a private per-user directory, including when runtime falls back to /tmp.
+TOGGLE_LOCK="$STATE_DIR/toggle.lock"
 
 RECORD_SOURCE="${RECORD_SOURCE:-default}"
 CLIP_CMD="${CLIP_CMD:-wl-copy}"
@@ -822,6 +824,23 @@ record_stop_and_transcribe() {
 
 case "${1:-}" in
   "")
+    # flock owns the lock; -o prevents the recording/server/overlay children
+    # from inheriting it after the toggle process exits. Do not queue presses:
+    # a queued press could immediately stop a recording that just started.
+    if flock -n -E 75 -o "$TOGGLE_LOCK" "$SCRIPT_DIR/hermeskey" --locked-toggle; then
+      :
+    else
+      rc=$?
+      if (( rc != 75 )); then
+        exit "$rc"
+      fi
+      log "Hotkey ignored: recording start/stop or transcription still in progress"
+      notify-send "$APP_NAME" "Still starting or transcribing; try again when ready." || true
+    fi
+    ;;
+  --locked-toggle)
+    # Only the outer flock invocation enters this path. Its lock spans the
+    # whole transition, including transcription and text insertion.
     if [[ -f "$STATE" ]]; then
       record_stop_and_transcribe
     else
