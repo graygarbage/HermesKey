@@ -70,12 +70,14 @@ Notes:
 
 ### One-line installer
 
-If your system dependencies are already installed, the bootstrap script will:
+Run this from your logged-in graphical session, **without sudo**. Bootstrap will:
 
-- download HermesKey
-- create `~/venvs/stt` if needed
-- install Python dependencies
-- run the installer
+1. Check bootstrap tools, download the release, and check system commands (`ffmpeg`, `wl-copy`, `notify-send`, `ydotool`, `ydotoold`, `pactl`), system Python's PySide6 overlay, the user systemd manager, and `/dev/uinput` access. Missing system packages or seat access stop the install with a diagnostic and a link to this guide; bootstrap does not install distro packages or change device permissions.
+2. Create/reuse `~/venvs/stt` and install Python dependencies (unless `--skip-venv` is specified).
+3. Copy the app and enable/restart the user services. The speech server downloads the configured model (`medium` by default) from Hugging Face on first use if it is not cached; public models do not require an HF token.
+4. Wait up to 10 minutes for the model and its socket. Transcribe a bundled, synthetic speech recording and check its result, then verify `ydotoold` is active. No microphone audio is recorded and nothing is typed into the active app by this test.
+
+Bootstrap exits with an error if validation fails **after** installing files; run `hermeskey-doctor` and `journalctl --user -u hermeskey.service -n 80 --no-pager` to diagnose it. A real microphone and application typing test remain necessary. Slow model downloads can use `HERMESKEY_MODEL_TIMEOUT=1200`; slow inference can use `HERMESKEY_SMOKE_TIMEOUT=300` (both in seconds). If you configured a nondefault `SOCK`, set `HERMESKEY_SMOKE_SOCKET` to that socket path. The sample WAV in `tests/smoke.wav` is synthesized with eSpeak NG and bundled in the release; customers do not need eSpeak installed. Do not pass `--skip-venv` unless your configured Python already has `requirements.txt` installed.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/graygarbage/HermesKey/main/scripts/bootstrap.sh | bash
@@ -96,12 +98,16 @@ curl -fsSL https://raw.githubusercontent.com/graygarbage/HermesKey/main/scripts/
 ### Manual install
 
 ```bash
+bash scripts/preflight.sh
 python3 -m venv ~/venvs/stt
 source ~/venvs/stt/bin/activate
 pip install -U pip
 pip install -r requirements.txt
 ./install.sh
+python3 scripts/verify-install.py
 ```
+
+Unlike bootstrap, `./install.sh` on its own only copies and starts the app; it does not install Python requirements or wait for the model.
 
 ## Bind the hotkey
 

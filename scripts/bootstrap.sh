@@ -151,11 +151,21 @@ fi
 [[ -n "${ROOT:-}" && -f "$ROOT/install.sh" ]] || fail "Could not find install.sh in extracted archive."
 
 ok "Archive extracted"
+step "Checking system dependencies and desktop access"
+bash "$ROOT/scripts/preflight.sh"
 setup_python_env
 
 step "Running HermesKey installer"
 chmod +x "$ROOT/install.sh"
 HERMESKEY_INSTALL_CONTEXT=bootstrap HERMESKEY_VENV="$VENV_DIR" bash "$ROOT/install.sh"
+
+step "Waiting for model and verifying transcription"
+if ! python3 "$ROOT/scripts/verify-install.py" \
+  --socket "${HERMESKEY_SMOKE_SOCKET:-${XDG_RUNTIME_DIR:-/tmp}/hermeskey.sock}" \
+  --model-timeout "${HERMESKEY_MODEL_TIMEOUT:-600}" \
+  --smoke-timeout "${HERMESKEY_SMOKE_TIMEOUT:-180}"; then
+  fail "HermesKey files were installed, but runtime validation failed. See errors above and run hermeskey-doctor."
+fi
 
 ok "HermesKey bootstrap complete"
 say
