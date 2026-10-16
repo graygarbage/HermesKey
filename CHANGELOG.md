@@ -6,6 +6,21 @@ All notable changes to HermesKey will be documented in this file.
 
 - TBD
 
+## [0.5.2] - 2026-10-16
+
+Reliability release for Wayland input and rapid hotkey presses.
+
+### Fixed
+
+- `hermeskey-ydotoold.service` now retries without exhausting systemd's start limit before the graphical login grants `/dev/uinput` access; retries are spaced 10 seconds apart (#43)
+- rapid hotkey presses no longer overlap recording, transcription, or text insertion and lose results; presses during an active transition are ignored with a notification (#44)
+- fresh installs no longer select PyAV 19, which is incompatible with `faster-whisper` 1.2.1 during WAV decoding
+
+### Changed
+
+- the doctor reports whether `/dev/uinput` is available to the current user, and troubleshooting guidance explains how to diagnose missing access (#43)
+- audio troubleshooting documentation includes common recording issues (#41)
+
 ## [0.5.1] - 2026-10-14
 
 Branding release.
