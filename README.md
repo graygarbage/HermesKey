@@ -86,7 +86,7 @@ The installer also adds local desktop launchers for:
 - HermesKey Doctor
 - HermesKey Logs
 - HermesKey Config
-- HermesKey Settings (preview; read-only until config editing is wired)
+- HermesKey Settings (preview; edit model and language; other controls coming later)
 
 For actual dictation, keep binding your hotkey directly to:
 
