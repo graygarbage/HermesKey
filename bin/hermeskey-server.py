@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import logging
 import os
+import re
 import signal
 import socket
 import sys
@@ -9,8 +11,31 @@ import sys
 from faster_whisper import WhisperModel
 
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("hermeskey.server")
+
+
 def log(msg: str) -> None:
-    print(msg, flush=True)
+    logger.info("%s", msg)
+
+
+def log_failure(stage: str, exc: Exception) -> None:
+    """Log diagnostics, never str(exc), traceback source lines or local variables.
+
+    Third-party exception messages may contain audio paths or user text. Python's
+    normal traceback formatter includes that message and full source paths too.
+    """
+    def safe(value: str) -> str:
+        return re.sub(r"[^A-Za-z0-9_.-]", "_", value)[:64]
+
+    frames = []
+    tb = exc.__traceback__
+    while tb is not None:
+        code = tb.tb_frame.f_code
+        frames.append(f"{safe(os.path.basename(code.co_filename))}:{tb.tb_lineno}:{safe(code.co_name)}")
+        tb = tb.tb_next
+    location = " <- ".join(frames[-8:]) if frames else "unknown"
+    logger.error("Server %s failed: %s at %s", stage, safe(type(exc).__name__), location)
 
 
 class Server:
@@ -23,7 +48,8 @@ class Server:
         self._running = True
 
     def load(self) -> None:
-        log(f"loading model={self.model_name} language={self.language or 'auto'}")
+        # Custom model IDs and paths may contain private names.
+        log("loading speech model")
         self.model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
         log("model loaded")
 
@@ -38,7 +64,7 @@ class Server:
         except FileNotFoundError:
             pass
         except Exception as e:
-            log(f"socket cleanup warning: {e}")
+            log_failure("socket cleanup", e)
 
     def handle(self, request: dict) -> dict:
         cmd = request.get("cmd")
@@ -51,14 +77,14 @@ class Server:
             }
 
         if cmd != "transcribe":
-            return {"status": "error", "error": f"unknown cmd: {cmd}"}
+            return {"status": "error", "error": "unknown command"}
 
         wav_path = request.get("wav")
         language = request.get("language", self.language)
         if not wav_path:
             return {"status": "error", "error": "missing wav"}
         if not os.path.exists(wav_path):
-            return {"status": "error", "error": f"wav not found: {wav_path}"}
+            return {"status": "error", "error": "wav not found"}
 
         segments, info = self.model.transcribe(
             wav_path,
@@ -71,6 +97,16 @@ class Server:
             "language": getattr(info, "language", None),
             "duration": getattr(info, "duration", None),
         }
+
+    def process(self, data: bytes) -> dict:
+        try:
+            raw = data.decode("utf-8", errors="replace").strip()
+            if not raw:
+                return {"status": "error", "error": "empty request"}
+            return self.handle(json.loads(raw))
+        except Exception as e:
+            log_failure("request", e)
+            return {"status": "error", "error": "server request failed; see hermeskey.service journal"}
 
     def serve(self) -> None:
         self.cleanup()
@@ -86,7 +122,7 @@ class Server:
             os.umask(old_umask)
         os.chmod(self.socket_path, 0o600)
         sock.listen(5)
-        log(f"listening on {self.socket_path}")
+        log("listening on local socket")
 
         while self._running:
             try:
@@ -103,17 +139,10 @@ class Server:
                         data += chunk
                         if b"\n" in chunk:
                             break
-
-                    raw = data.decode("utf-8", errors="replace").strip()
-                    if not raw:
-                        response = {"status": "error", "error": "empty request"}
-                    else:
-                        request = json.loads(raw)
-                        response = self.handle(request)
-                except Exception as e:
-                    response = {"status": "error", "error": str(e)}
-
-                conn.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+                    response = self.process(data)
+                    conn.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+                except OSError as e:
+                    log_failure("client connection", e)
 
 
 def main() -> int:
@@ -133,9 +162,14 @@ def main() -> int:
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
 
-    server.load()
-    server.serve()
-    server.cleanup()
+    try:
+        server.load()
+        server.serve()
+    except Exception as e:
+        log_failure("startup", e)
+        return 1
+    finally:
+        server.cleanup()
     return 0
 
 

@@ -296,16 +296,15 @@ read_app_vars() {
 }
 
 capture_target_app() {
-  query_active_app TARGET_ >"$TARGET_STATE"
-  read_app_vars TARGET_ <"$TARGET_STATE"
-  log "Target app: ${TARGET_DESKTOP_FILE:-?} | ${TARGET_RESOURCE_CLASS:-?} | ${TARGET_CAPTION:-?} | ${TARGET_UUID:-?}"
+  # Focus safety only needs the UUID and desktop file. Do not retain window
+  # captions (which can contain document titles or user-entered text).
+  query_active_app TARGET_ | grep -E '^TARGET_(UUID|DESKTOP_FILE)=' >"$TARGET_STATE"
+  log "Target window captured for focus safety"
 }
 
 load_target_app() {
   TARGET_UUID=""
   TARGET_DESKTOP_FILE=""
-  TARGET_RESOURCE_CLASS=""
-  TARGET_CAPTION=""
   if [[ -f "$TARGET_STATE" ]]; then
     read_app_vars TARGET_ <"$TARGET_STATE"
   fi
