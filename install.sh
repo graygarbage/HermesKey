@@ -50,6 +50,7 @@ install -m 0755 "$ROOT/bin/hermeskey-restart-services" "$BIN_DEST/hermeskey-rest
 install -m 0755 "$ROOT/bin/hermeskey-control-center" "$BIN_DEST/hermeskey-control-center"
 install -m 0755 "$ROOT/bin/hermeskey-settings.py" "$BIN_DEST/hermeskey-settings.py"
 install -m 0644 "$ROOT/bin/hermeskey_settings_config.py" "$BIN_DEST/hermeskey_settings_config.py"
+install -m 0644 "$ROOT/bin/hermeskey_audio_sources.py" "$BIN_DEST/hermeskey_audio_sources.py"
 install -m 0644 "$ROOT/systemd/user/hermeskey.service" "$SYSTEMD_DEST/hermeskey.service"
 install -m 0644 "$ROOT/systemd/user/hermeskey-ydotoold.service" "$SYSTEMD_DEST/hermeskey-ydotoold.service"
 install -m 0644 "$ROOT/config/hermeskey.env.example" "$CONFIG_EXAMPLE_DEST"

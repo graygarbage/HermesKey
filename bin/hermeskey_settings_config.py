@@ -1,4 +1,4 @@
-"""Small, non-executing editor for the two GUI-managed .env settings.
+"""Small, non-executing editor for GUI-managed .env settings.
 
 The shell hotkey and systemd both consume ~/.config/hermeskey/hermeskey.env.
 Everything we do not understand is left intact, not parsed or evaluated.
@@ -11,13 +11,14 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
-DEFAULTS = {"MODEL": "medium", "STT_LANG": "en"}
+DEFAULTS = {"MODEL": "medium", "STT_LANG": "en", "RECORD_SOURCE": "default"}
 SAFE_MODEL = re.compile(r"[A-Za-z0-9._/-]+\Z")
 SAFE_LANGUAGE = re.compile(r"(?:[a-z]{2}|haw|yue)?\Z")
-MANAGED = re.compile(r"^[ \t]*(?:export[ \t]+)?(MODEL|STT_LANG)[ \t]*=")
+SAFE_SOURCE = re.compile(r"[A-Za-z0-9_./:@-]+\Z")
+MANAGED = re.compile(r"^[ \t]*(?:export[ \t]+)?(MODEL|STT_LANG|RECORD_SOURCE)[ \t]*=")
 ASSIGNMENT = re.compile(
-    r"^(?P<prefix>[ \t]*(?P<key>MODEL|STT_LANG)=)"
-    r"(?P<value>[A-Za-z0-9._/-]*|\"[A-Za-z0-9._/-]*\"|'[A-Za-z0-9._/-]*')"
+    r"^(?P<prefix>[ \t]*(?P<key>MODEL|STT_LANG|RECORD_SOURCE)=)"
+    r"(?P<value>[A-Za-z0-9_./:@-]*|\"[A-Za-z0-9_./:@-]*\"|'[A-Za-z0-9_./:@-]*')"
     r"(?P<suffix>[ \t]*(?:\#.*)?)$"
 )
 
@@ -72,7 +73,8 @@ class ConfigDocument:
         for key, value in edits.items():
             if key not in DEFAULTS:
                 raise ConfigError(f"Unsupported GUI key: {key}")
-            if not isinstance(value, str) or not (SAFE_MODEL if key == "MODEL" else SAFE_LANGUAGE).fullmatch(value):
+            pattern = {"MODEL": SAFE_MODEL, "STT_LANG": SAFE_LANGUAGE, "RECORD_SOURCE": SAFE_SOURCE}[key]
+            if not isinstance(value, str) or not pattern.fullmatch(value):
                 raise ConfigError(f"Invalid {key}; use a simple literal without spaces, quotes or shell syntax")
         lines, _, positions = parse_lines(self.original.decode("utf-8"))
         for key, value in edits.items():
