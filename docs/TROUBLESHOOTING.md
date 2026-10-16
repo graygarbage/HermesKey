@@ -56,6 +56,13 @@ And the local runtime log:
 tail -n 100 ~/.local/state/hermeskey/hermeskey.log
 ```
 
+The speech service writes diagnostic failures to its user journal: the failure
+stage, exception type and code locations (file basenames, function names, line
+numbers). It does **not** log audio, transcripts, request bodies, full file
+paths, or raw exception messages; those may include private data. The hotkey
+only sees a generic error when the server fails. Include the journal excerpt
+when filing a bug, and still review it before sharing.
+
 ## No audio captured
 
 Check if the configured recording source exists and test recording manually:
