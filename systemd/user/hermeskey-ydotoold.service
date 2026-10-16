@@ -2,13 +2,16 @@
 Description=HermesKey user ydotool daemon
 After=graphical-session.target
 Wants=graphical-session.target
+# The user manager may start before graphical login grants /dev/uinput access.
+# Do not exhaust the start limit before logind applies the seat's uaccess ACL.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 EnvironmentFile=-%h/.config/hermeskey/hermeskey.env
 ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket
 Restart=on-failure
-RestartSec=1
+RestartSec=10
 
 [Install]
 WantedBy=default.target
