@@ -9,7 +9,7 @@ HermesKey is primarily a hotkey-driven tool, but the installer also ships a few 
 - **HermesKey Doctor** — runs diagnostics and shows the report
 - **HermesKey Logs** — shows runtime and service logs
 - **HermesKey Config** — opens `~/.config/hermeskey/hermeskey.env`
-- **HermesKey Settings (preview)** — a native PySide6 window shell with Speech, Input, Appearance, and System sections
+- **HermesKey Settings (preview)** — edit the speech model and language in a native PySide6 window; other sections are placeholders
 
 These launchers are installed into:
 
@@ -19,7 +19,7 @@ These launchers are installed into:
 
 The control-center launcher uses `kdialog` on KDE when available and falls back to `zenity` or plain terminal output. It can also open the settings preview. The settings window requires the system's PySide6 QtWidgets package (already used by the overlay) and can be launched with `~/.local/bin/hermeskey-settings.py`.
 
-The settings shell is deliberately **read-only**: Save and Apply are disabled until config load/save wiring is implemented in #5. Cancel or closing the window makes no changes. Continue using the Config launcher to edit settings for now.
+The settings preview edits **only `MODEL` and `STT_LANG`** in `~/.config/hermeskey/hermeskey.env`, the path the user systemd service reads. Save writes and closes; Apply writes and stays open; Cancel discards. Closing with unsaved changes asks first. The GUI preserves other settings and comments, refuses unsupported/duplicate managed assignments and external file changes, and validates before writing. After a save it offers a speech-service restart; declining leaves saved changes pending until you restart the service. Other settings still require the Config launcher; richer controls are tracked in #6–#8. Alternate `XDG_CONFIG_HOME` paths are not yet used by the systemd unit, so the GUI warns and targets the canonical path.
 
 ## Why not a big GUI app?
 

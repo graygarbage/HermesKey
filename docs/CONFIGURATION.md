@@ -6,7 +6,9 @@ HermesKey reads configuration from:
 ~/.config/hermeskey/hermeskey.env
 ```
 
-The installer copies a starter file there on first install. After changing it, run `hermeskey-doctor --config-only` (or `hermeskey-doctor`) to check model/language settings, insertion modes, flags, and numeric options before restarting the services. Invalid settings cause a nonzero exit status; unknown model aliases and custom Hugging Face IDs/paths are warnings because they cannot be verified offline. A valid model name is not a guarantee that its download will succeed.
+The installer copies a starter file there on first install. The Settings GUI can load and save `MODEL` and `STT_LANG` only; it leaves other lines, comments, and unknown settings untouched. It supports simple literal model IDs/paths without spaces or shell syntax. Configurations with duplicate or complex `MODEL` / `STT_LANG` assignments must be edited manually. Saves are validated, atomic, and made owner-only (mode `0600`); if the file changed since opening Settings, reload instead of overwriting someone else's edit. No backups or values are written to logs. Other fields still use the Config launcher.
+
+After changing settings, run `hermeskey-doctor --config-only` (or `hermeskey-doctor`) to check model/language settings, insertion modes, flags, and numeric options before restarting the services. Invalid settings cause a nonzero exit status; unknown model aliases and custom Hugging Face IDs/paths are warnings because they cannot be verified offline. A valid model name is not a guarantee that its download will succeed. `MODEL` and `STT_LANG` changes need a restart of `hermeskey.service`, which the GUI offers after saving but never performs without permission. The GUI targets `~/.config/hermeskey/hermeskey.env` even if `XDG_CONFIG_HOME` or `HERMESKEY_CONFIG` is set, because the systemd service currently hard-codes that path.
 
 ## Core settings
 
