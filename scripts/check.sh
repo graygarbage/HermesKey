@@ -27,6 +27,9 @@ systemd-analyze --user verify systemd/user/hermeskey.service systemd/user/hermes
 echo "Hotkey concurrency"
 bash scripts/test-toggle-lock.sh
 
+echo "Preserved config"
+bash scripts/test-check-config.sh
+
 if command -v shellcheck >/dev/null 2>&1; then
   echo "shellcheck"
   shellcheck "${shell_scripts[@]}"

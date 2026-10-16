@@ -73,7 +73,7 @@ Notes:
 Run this from your logged-in graphical session, **without sudo**. Bootstrap will:
 
 1. Check bootstrap tools, download the release, and check system commands (`ffmpeg`, `wl-copy`, `notify-send`, `ydotool`, `ydotoold`, `pactl`), system Python's PySide6 overlay, the user systemd manager, and `/dev/uinput` access. Missing system packages or seat access stop the install with a diagnostic and a link to this guide; bootstrap does not install distro packages or change device permissions.
-2. Create/reuse `~/venvs/stt` and install Python dependencies (unless `--skip-venv` is specified).
+2. Create/reuse `~/venvs/stt` and install Python dependencies (unless `--skip-venv` is specified). If an existing config points `PYTHON_STT` to a deleted venv or one without `faster-whisper`, stop immediately with an actionable error rather than waiting for a service that will never start.
 3. Copy the app and enable/restart the user services. The speech server downloads the configured model (`medium` by default) from Hugging Face on first use if it is not cached; public models do not require an HF token.
 4. Wait up to 10 minutes for the model and its socket. Transcribe a bundled, synthetic speech recording and check its result, then verify `ydotoold` is active. No microphone audio is recorded and nothing is typed into the active app by this test.
 

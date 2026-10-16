@@ -164,6 +164,8 @@ fi
 step "Checking system dependencies and desktop access"
 bash "$ROOT/scripts/preflight.sh"
 setup_python_env
+step "Checking preserved speech configuration"
+bash "$ROOT/scripts/check-config.sh" "$VENV_DIR"
 
 step "Running HermesKey installer"
 chmod +x "$ROOT/install.sh"
