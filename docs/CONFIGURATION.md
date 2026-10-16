@@ -6,7 +6,7 @@ HermesKey reads configuration from:
 ~/.config/hermeskey/hermeskey.env
 ```
 
-The installer copies a starter file there on first install.
+The installer copies a starter file there on first install. After changing it, run `hermeskey-doctor --config-only` (or `hermeskey-doctor`) to check model/language settings, insertion modes, flags, and numeric options before restarting the services. Invalid settings cause a nonzero exit status; unknown model aliases and custom Hugging Face IDs/paths are warnings because they cannot be verified offline. A valid model name is not a guarantee that its download will succeed.
 
 ## Core settings
 
@@ -17,7 +17,7 @@ RECORD_SOURCE=default
 ```
 
 - `MODEL`: any supported `faster-whisper` model name
-- `STT_LANG`: spoken language code; set empty for auto-detect
+- `STT_LANG`: spoken language code supported by faster-whisper; set empty for auto-detect (e.g. `en`, `zh`, `haw` or `yue`)
 - `RECORD_SOURCE`: `default` follows the desktop's default input; to pin a specific mic, use a name from `pactl list short sources`
 
 ## Insertion behavior

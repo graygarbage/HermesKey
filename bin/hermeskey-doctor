@@ -14,10 +14,125 @@ check_cmd() {
   fi
 }
 
+CONFIG_FILE="${HERMESKEY_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hermeskey/hermeskey.env}"
+CONFIG_ERRORS=0
+if [[ -f "$CONFIG_FILE" ]]; then
+  # HermesKey itself sources this user-owned shell configuration.
+  # shellcheck disable=SC1090
+  if ! source "$CONFIG_FILE"; then
+    fail "Could not load config: $CONFIG_FILE"
+    CONFIG_ERRORS=1
+  fi
+fi
+PYTHON_STT="${PYTHON_STT:-$HOME/venvs/stt/bin/python}"
+RECORD_SOURCE="${RECORD_SOURCE:-default}"
+
+config_error() {
+  fail "$*"
+  CONFIG_ERRORS=1
+}
+
+validate_choice() {
+  local name="$1" value="$2" choices="$3"
+  if [[ " $choices " == *" $value "* ]]; then
+    ok "$name=$value"
+  else
+    config_error "$name=$value is invalid (choose: ${choices// /, })"
+  fi
+}
+
+validate_config() {
+  section 'Configuration'
+  printf 'File: %s\n' "$CONFIG_FILE"
+  [[ -f "$CONFIG_FILE" ]] || warn 'Config file missing; using defaults'
+
+  local model="${MODEL:-medium}" language="${STT_LANG-en}" lang_result
+  case "$model" in
+    tiny|tiny.en|base|base.en|small|small.en|medium|medium.en|large|large-v1|large-v2|large-v3|large-v3-turbo|turbo|distil-large-v2|distil-large-v3|distil-medium.en|distil-small.en)
+      ok "MODEL=$model"
+      ;;
+    *)
+      if [[ -d "$model" || "$model" == */* ]]; then
+        warn "MODEL=$model is a custom path or Hugging Face ID; cannot verify it offline"
+      else
+        warn "Unknown faster-whisper model alias: $model (verify spelling or use a local path / Hugging Face ID)"
+      fi
+      ;;
+  esac
+
+  if [[ -z "$language" ]]; then
+    ok 'STT_LANG= (automatic detection)'
+  elif [[ ! "$language" =~ ^([a-z]{2}|haw|yue)$ ]]; then
+    config_error "Invalid STT_LANG=$language (expected a Whisper language code or empty for auto-detect)"
+  else
+    # Use faster-whisper's actual supported codes when the configured venv is
+    # present. haw and yue are valid three-letter exceptions to ISO-639-1.
+    lang_result="$("$PYTHON_STT" - "$language" 2>/dev/null <<'PY'
+import sys
+from faster_whisper.tokenizer import _LANGUAGE_CODES
+print('valid' if sys.argv[1] in _LANGUAGE_CODES else 'invalid')
+PY
+)" || lang_result=unavailable
+    case "$lang_result" in
+      valid) ok "STT_LANG=$language" ;;
+      invalid) config_error "Unsupported STT_LANG=$language (not in faster-whisper's language codes)" ;;
+      *) warn "STT_LANG=$language has valid syntax, but could not be checked against faster-whisper (check PYTHON_STT)" ;;
+    esac
+  fi
+
+  validate_choice INSERT_MODE "${INSERT_MODE:-type}" 'type clipboard'
+  validate_choice TYPE_BACKEND "${TYPE_BACKEND:-auto}" 'auto ydotool wtype xdotool'
+  validate_choice PASTE_SHORTCUT "${PASTE_SHORTCUT:-auto}" 'auto ctrl-v ctrl-shift-v shift-insert'
+  local name value
+  for name in COPY_TO_CLIPBOARD KEEP_AUDIO OVERLAY_ENABLED SOUND_ENABLED FOCUS_SAFE_MODE; do
+    value="${!name:-}"
+    # All these settings default to 1 except KEEP_AUDIO and FOCUS_SAFE_MODE.
+    if [[ -z "$value" ]]; then
+      case "$name" in
+        KEEP_AUDIO|FOCUS_SAFE_MODE) value=0 ;;
+        *) value=1 ;;
+      esac
+    fi
+    validate_choice "$name" "$value" '0 1'
+  done
+  for name in TYPE_KEY_DELAY TYPE_KEY_HOLD; do
+    case "$name" in
+      TYPE_KEY_DELAY) value="${TYPE_KEY_DELAY:-1}" ;;
+      TYPE_KEY_HOLD) value="${TYPE_KEY_HOLD:-5}" ;;
+    esac
+    if [[ "$value" =~ ^[0-9]+$ ]]; then
+      ok "$name=$value"
+    else
+      config_error "$name=$value is invalid (expected a non-negative integer in milliseconds)"
+    fi
+  done
+  for name in START_TONE_HZ STOP_TONE_HZ TONE_DURATION TONE_VOLUME; do
+    case "$name" in
+      START_TONE_HZ) value="${START_TONE_HZ:-660}" ;;
+      STOP_TONE_HZ) value="${STOP_TONE_HZ:-520}" ;;
+      TONE_DURATION) value="${TONE_DURATION:-0.035}" ;;
+      TONE_VOLUME) value="${TONE_VOLUME:-0.20}" ;;
+    esac
+    if [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      ok "$name=$value"
+    else
+      config_error "$name=$value is invalid (expected a non-negative number)"
+    fi
+  done
+}
+
+case "${1:-}" in
+  '') ;;
+  --config-only) validate_config; exit "$CONFIG_ERRORS" ;;
+  *) printf 'Usage: hermeskey-doctor [--config-only]\n' >&2; exit 2 ;;
+esac
+
 section 'Environment'
 printf 'XDG_SESSION_TYPE=%s\n' "${XDG_SESSION_TYPE:-}"
 printf 'XDG_CURRENT_DESKTOP=%s\n' "${XDG_CURRENT_DESKTOP:-}"
 printf 'XDG_RUNTIME_DIR=%s\n' "${XDG_RUNTIME_DIR:-}"
+
+validate_config
 
 section 'Core commands'
 for cmd in ffmpeg python3 wl-copy notify-send ydotool ydotoold pactl paplay; do
@@ -25,12 +140,6 @@ for cmd in ffmpeg python3 wl-copy notify-send ydotool ydotoold pactl paplay; do
 done
 
 section 'Python venv'
-PYTHON_STT="$(
-  CONFIG_FILE="${HERMESKEY_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hermeskey/hermeskey.env}"
-  # shellcheck disable=SC1090
-  [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE" >/dev/null 2>&1
-  printf '%s' "${PYTHON_STT:-$HOME/venvs/stt/bin/python}"
-)"
 if [[ -x "$PYTHON_STT" ]]; then
   ok "venv python found: $PYTHON_STT"
   if "$PYTHON_STT" -c 'import faster_whisper' >/dev/null 2>&1; then
@@ -98,12 +207,6 @@ else
 fi
 
 section 'Audio sources'
-RECORD_SOURCE="$(
-  CONFIG_FILE="${HERMESKEY_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hermeskey/hermeskey.env}"
-  # shellcheck disable=SC1090
-  [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE" >/dev/null 2>&1
-  printf '%s' "${RECORD_SOURCE:-default}"
-)"
 if command -v pactl >/dev/null 2>&1; then
   if [[ "$RECORD_SOURCE" == "default" ]]; then
     ok "RECORD_SOURCE=default (currently: $(pactl get-default-source 2>/dev/null || echo unknown))"
@@ -120,5 +223,10 @@ systemctl --user --no-pager --full status hermeskey.service 2>/dev/null | sed -n
 systemctl --user --no-pager --full status hermeskey-ydotoold.service 2>/dev/null | sed -n '1,20p' || true
 
 section 'Result'
-ok 'Doctor run complete.'
+if (( CONFIG_ERRORS )); then
+  fail 'Doctor found invalid configuration; correct the settings above.'
+else
+  ok 'Doctor run complete.'
+fi
 printf 'If dictation still fails, include this output plus %s in your issue.\n' "${XDG_STATE_HOME:-$HOME/.local/state}/hermeskey/hermeskey.log"
+exit "$CONFIG_ERRORS"
