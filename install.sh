@@ -48,6 +48,7 @@ install -m 0755 "$ROOT/bin/hermeskey-open-config" "$BIN_DEST/hermeskey-open-conf
 install -m 0755 "$ROOT/bin/hermeskey-open-logs" "$BIN_DEST/hermeskey-open-logs"
 install -m 0755 "$ROOT/bin/hermeskey-restart-services" "$BIN_DEST/hermeskey-restart-services"
 install -m 0755 "$ROOT/bin/hermeskey-control-center" "$BIN_DEST/hermeskey-control-center"
+install -m 0755 "$ROOT/bin/hermeskey-settings.py" "$BIN_DEST/hermeskey-settings.py"
 install -m 0644 "$ROOT/systemd/user/hermeskey.service" "$SYSTEMD_DEST/hermeskey.service"
 install -m 0644 "$ROOT/systemd/user/hermeskey-ydotoold.service" "$SYSTEMD_DEST/hermeskey-ydotoold.service"
 install -m 0644 "$ROOT/config/hermeskey.env.example" "$CONFIG_EXAMPLE_DEST"
@@ -64,6 +65,7 @@ sed "s|@BIN_DEST@|$BIN_DEST|g" "$ROOT/desktop/hermeskey-doctor.desktop.in" > "$A
 sed "s|@BIN_DEST@|$BIN_DEST|g" "$ROOT/desktop/hermeskey-config.desktop.in" > "$APPLICATIONS_DEST/hermeskey-config.desktop"
 sed "s|@BIN_DEST@|$BIN_DEST|g" "$ROOT/desktop/hermeskey-logs.desktop.in" > "$APPLICATIONS_DEST/hermeskey-logs.desktop"
 sed "s|@BIN_DEST@|$BIN_DEST|g" "$ROOT/desktop/hermeskey-control-center.desktop.in" > "$APPLICATIONS_DEST/hermeskey-control-center.desktop"
+sed "s|@BIN_DEST@|$BIN_DEST|g" "$ROOT/desktop/hermeskey-settings.desktop.in" > "$APPLICATIONS_DEST/hermeskey-settings.desktop"
 
 if [[ ! -f "$CONFIG_DEST" ]]; then
   install -m 0644 "$ROOT/config/hermeskey.env.example" "$CONFIG_DEST"
@@ -107,7 +109,8 @@ printf 'Config file:   %s\n' "$CONFIG_DEST"
 printf 'Version file:  %s\n' "$VERSION_DEST"
 printf 'Hotkey target: %s\n' "$BIN_DEST/hermeskey"
 printf 'Launchers:     %s\n' "$APPLICATIONS_DEST"
-printf 'Control app:   %s\n\n' "$BIN_DEST/hermeskey-control-center"
+printf 'Control app:   %s\n' "$BIN_DEST/hermeskey-control-center"
+printf 'Settings UI:   %s (preview)\n\n' "$BIN_DEST/hermeskey-settings.py"
 
 if [[ "${HERMESKEY_INSTALL_CONTEXT:-}" != "bootstrap" ]]; then
   printf 'Suggested next steps:\n'
