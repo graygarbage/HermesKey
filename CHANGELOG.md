@@ -14,6 +14,7 @@ Reliability release for Wayland input and rapid hotkey presses.
 
 - `hermeskey-ydotoold.service` now retries without exhausting systemd's start limit before the graphical login grants `/dev/uinput` access; retries are spaced 10 seconds apart (#43)
 - rapid hotkey presses no longer overlap recording, transcription, or text insertion and lose results; presses during an active transition are ignored with a notification (#44)
+- fresh installs no longer select PyAV 19, which is incompatible with `faster-whisper` 1.2.1 during WAV decoding
 
 ### Changed
 
