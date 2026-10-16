@@ -75,6 +75,15 @@ else
   warn 'hermeskey-ydotoold.service is not active'
 fi
 
+section 'Input device'
+if [[ ! -e /dev/uinput ]]; then
+  warn '/dev/uinput is missing: load the uinput module and check your distro configuration'
+elif [[ ! -r /dev/uinput || ! -w /dev/uinput ]]; then
+  warn '/dev/uinput is not accessible to this user: ydotoold cannot start; check your active seat and udev uaccess rules (see docs/TROUBLESHOOTING.md)'
+else
+  ok '/dev/uinput is accessible to this user'
+fi
+
 section 'Sockets'
 if [[ -S "${XDG_RUNTIME_DIR:-/run/user/$UID}/hermeskey.sock" ]]; then
   ok "HermesKey socket present: ${XDG_RUNTIME_DIR:-/run/user/$UID}/hermeskey.sock"
