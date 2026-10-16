@@ -107,6 +107,10 @@ class ConfigDocument:
                 stream.flush()
                 os.fsync(stream.fileno())
             validator(tmp_path)
+            # Other editors do not take our advisory lock; recheck after the
+            # potentially slow validator, immediately before replacing.
+            if self.path.is_symlink() or not self.path.is_file() or self.path.read_bytes() != self.original:
+                raise ConfigChanged("Config changed while validating; reopen it to avoid overwriting edits")
             os.replace(tmp_path, self.path)
             tmp_path = None
             directory_fd = os.open(self.path.parent, os.O_RDONLY)

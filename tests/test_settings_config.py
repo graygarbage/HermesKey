@@ -46,6 +46,13 @@ class SettingsConfigTests(unittest.TestCase):
             doc.save({"MODEL": "tiny"}, lambda candidate: None)
         self.assertIn("external editor", self.path.read_text())
 
+    def test_external_change_during_validation_is_not_lost(self):
+        def change_config(_candidate):
+            self.path.write_text(self.text + "# modified during validation\n")
+        with self.assertRaises(ConfigChanged):
+            ConfigDocument(self.path).save({"MODEL": "tiny"}, change_config)
+        self.assertIn("modified during validation", self.path.read_text())
+
     def test_refuses_duplicate_or_unsupported_assignments(self):
         for value in ("MODEL=medium\nMODEL=small\n", "MODEL=$DYNAMIC_MODEL\n", "export STT_LANG=en\n"):
             with self.subTest(value=value):
