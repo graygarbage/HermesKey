@@ -30,6 +30,9 @@ bash scripts/test-toggle-lock.sh
 echo "Preserved config"
 bash scripts/test-check-config.sh
 
+echo "Doctor config validation"
+bash scripts/test-doctor-config.sh
+
 if command -v shellcheck >/dev/null 2>&1; then
   echo "shellcheck"
   shellcheck "${shell_scripts[@]}"
