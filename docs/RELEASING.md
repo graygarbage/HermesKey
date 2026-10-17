@@ -13,15 +13,14 @@ HermesKey releases should feel deliberate:
 ## Checklist
 
 - [ ] update `VERSION`
-- [ ] update `CHANGELOG.md`
-- [ ] run `make check`
+- [ ] update `CHANGELOG.md` and write `docs/releases/v$VERSION.md` (published as the GitHub Release body; use absolute links)
+- [ ] run `make check` and `make package`
 - [ ] verify install docs still match reality
-- [ ] verify the bootstrap installer still works
-- [ ] commit release prep changes
-- [ ] tag the release
-- [ ] push branch and tag
-- [ ] verify GitHub Actions created the release artifact
-- [ ] update release notes if needed
+- [ ] test `bash scripts/bootstrap.sh --local` on a fresh KDE test install **and** an upgrade (confirm existing config is preserved, the Settings launcher is the sole visible menu entry, and pinned legacy shortcuts still work)
+- [ ] confirm microphone dictation, Unicode insertion, Settings save/restart, and `hermeskey-doctor` on the test machine
+- [ ] merge release-prep PR; on `main`, pull the merged commit and confirm `VERSION`, changelog date, and release notes before tagging
+- [ ] tag/push the release from the verified `main` commit only (with approval)
+- [ ] verify GitHub Actions published the `.tar.gz` archive and the handwritten release body; confirm the standard installer resolves the new release
 
 ## Helper commands
 

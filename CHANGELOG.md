@@ -6,6 +6,26 @@ All notable changes to HermesKey will be documented in this file.
 
 - TBD
 
+## [0.6.0] - 2026-10-17
+
+Settings GUI release: one window for day-to-day configuration and local support tools.
+
+### Added
+
+- native PySide6 Settings window with Speech, Input, Appearance, and System pages; safely edit model, spoken language, microphone, insertion and clipboard behavior, focus safety, overlay, and sound (#4–#8, #59)
+- service readiness and restart actions, local Doctor and bounded log viewers, and an advanced config-file action in Settings (#8, #56)
+- bootstrap checks for system dependencies and a working speech venv, waits for model readiness, and validates a synthetic-audio transcription after installing; Doctor now validates config values (#46, #47)
+
+### Fixed
+
+- Wayland `ydotool type` silently losing non-ASCII transcripts: use clipboard paste when backup is enabled, otherwise warn without copying or inserting text (#54, #55)
+- speech-server error logging no longer includes raw exception messages or request content (#48)
+
+### Changed
+
+- Settings is the single visible KDE menu entry; legacy Status, Doctor, Logs, Config, and Control Center desktop IDs remain hidden for pinned shortcuts and their CLI helpers remain available (#56)
+- Control Center launches Settings; AppStream points to the Settings desktop entry (#56)
+
 ## [0.5.2] - 2026-10-16
 
 Reliability release for Wayland input and rapid hotkey presses.
