@@ -70,12 +70,20 @@ And the local runtime log:
 tail -n 100 ~/.local/state/hermeskey/hermeskey.log
 ```
 
-The speech service writes diagnostic failures to its user journal: the failure
-stage, exception type and code locations (file basenames, function names, line
-numbers). It does **not** log audio, transcripts, request bodies, full file
-paths, or raw exception messages; those may include private data. The hotkey
-only sees a generic error when the server fails. Include the journal excerpt
-when filing a bug, and still review it before sharing.
+Doctor shows service readiness but intentionally **omits raw service status and
+journal snippets**: they can include third-party network request URLs, process
+arguments, device names or local paths. The speech server now forwards only its
+own allowlisted diagnostic events from Python logging; it suppresses third-party
+library logging in the service by default. Existing journal history and output
+written directly by other programs may still contain private metadata. Inspect
+logs only on your machine, and carefully redact them before any voluntary sharing.
+Never post audio, transcripts, tokens, window titles, device names or personal
+paths in a public issue. For a security-sensitive problem, follow
+[SECURITY.md](../SECURITY.md); if private reporting is unavailable, request a
+private contact channel without posting details publicly. This logging change
+does **not** prevent a
+model-library metadata request on restart; offline operation is tracked in
+[issue #65](https://github.com/graygarbage/HermesKey/issues/65).
 
 ## No audio captured
 

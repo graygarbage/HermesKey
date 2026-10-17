@@ -1,6 +1,8 @@
 """Error diagnostics must never disclose user-supplied request or exception data."""
 import importlib.util
+import io
 import json
+import logging
 import sys
 import tempfile
 import types
@@ -56,6 +58,21 @@ class ServerLoggingTests(unittest.TestCase):
                 server_module.log_failure("startup", exc)
         self.assertNotIn(secret, str(error.call_args))
         self.assertIn("OSError", str(error.call_args))
+
+    def test_third_party_request_logs_are_not_forwarded(self):
+        handler = server_module.logger.handlers[0]
+        original = handler.stream
+        output = io.StringIO()
+        try:
+            handler.setStream(output)
+            logging.getLogger("httpx").warning("PRIVATE_SYNTHETIC_HTTP_REQUEST_URL")
+            logging.getLogger("faster_whisper").warning("PRIVATE_SYNTHETIC_MODEL_PATH")
+            server_module.log("loading speech model")
+        finally:
+            handler.setStream(original)
+        self.assertIn("loading speech model", output.getvalue())
+        self.assertNotIn("PRIVATE_SYNTHETIC", output.getvalue())
+        self.assertIsInstance(logging.getLogger().handlers[0], logging.NullHandler)
 
     def test_model_load_does_not_log_custom_path(self):
         secret = "PRIVATE_MODEL_FOLDER"

@@ -28,5 +28,5 @@ body:
     id: logs
     attributes:
       label: Relevant logs
-      description: Include excerpts from ~/.local/state/hermeskey/hermeskey.log or journalctl if possible.
+      description: Optional, redacted excerpts only. Review logs locally first; never post audio, dictated text, model paths, device names, window titles, private URLs or tokens. For a security-sensitive issue, use the private route in SECURITY.md instead of a public bug report.
       render: shell
