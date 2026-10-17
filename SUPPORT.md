@@ -16,8 +16,8 @@ Please gather:
 - desktop environment / compositor
 - `echo $XDG_SESSION_TYPE`
 - whether `ydotool` works by itself
-- logs from `~/.local/state/hermeskey/hermeskey.log`
-- output from `systemctl --user status hermeskey.service`
+- `hermeskey-doctor` results, reviewed for anything personal before sharing
+- relevant log or `systemctl --user status hermeskey.service` excerpts **for local review first**; share only the minimum needed after redacting paths, device/app names, URLs and other personal information. Never post recordings, dictated text, tokens, full config files or raw journals publicly. For a suspected vulnerability, follow [SECURITY.md](SECURITY.md) instead of posting details in an issue.
 
 ## Questions
 
