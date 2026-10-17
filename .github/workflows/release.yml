@@ -18,8 +18,11 @@ jobs:
           chmod +x scripts/build-release.sh
           ./scripts/build-release.sh
 
+      - name: Check handwritten release notes
+        run: test -s "docs/releases/${GITHUB_REF_NAME}.md"
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3
         with:
           files: dist/*.tar.gz
-          generate_release_notes: true
+          body_path: docs/releases/${{ github.ref_name }}.md
