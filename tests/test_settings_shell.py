@@ -34,6 +34,23 @@ class SettingsShellTests(unittest.TestCase):
         with patch.object(self.SettingsWindow, "refresh_sources"):
             return self.SettingsWindow(path)
 
+    def test_speech_page_clarifies_spoken_language_not_translation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\n")
+            window = self.window(config)
+            window.show()
+            self.app.processEvents()
+            self.assertEqual(window.language_label.text(), "Spoken language:")
+            self.assertIs(window.language_label.buddy(), window.language_picker)
+            self.assertTrue(window.language_hint.isVisible())
+            self.assertIn("language you speak", window.language_hint.text())
+            self.assertIn("Auto-detect", window.language_hint.text())
+            self.assertIn("does not translate", window.language_hint.text())
+            self.assertEqual(window.language_picker.currentData(), "en")
+            window.close()
+            self.assertEqual(config.read_text(), "MODEL=medium\nSTT_LANG=en\n")
+
     def test_advanced_config_uses_canonical_file_and_refuses_unsaved_edits(self):
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "hermeskey.env"
