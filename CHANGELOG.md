@@ -6,6 +6,15 @@ All notable changes to HermesKey will be documented in this file.
 
 - TBD
 
+## [0.6.2] - 2026-10-17
+
+Security maintenance release for Wayland typing socket trust.
+
+### Security
+
+- HermesKey no longer falls back to a shared `/tmp` `ydotool` socket. It accepts typing sockets only directly within an owner-only user runtime directory, owned by the current user, with owner-only permissions and no symlink; untrusted or unavailable sockets are refused before sending keystrokes
+- when typing is refused, a transcript is left on the clipboard only if clipboard backup is enabled; otherwise no text is inserted or copied
+
 ## [0.6.1] - 2026-10-17
 
 Privacy-focused maintenance release for local dictation and support diagnostics.
