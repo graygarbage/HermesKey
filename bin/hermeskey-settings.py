@@ -148,7 +148,7 @@ class SettingsWindow(QMainWindow):
                 form.addRow("", self.clipboard_backup)
                 form.addRow("", self.focus_safe)
                 page_layout.addLayout(form)
-                hint = QLabel("Clipboard mode always copies text. Focus safety needs KDE window detection; check Doctor if it cannot detect windows.")
+                hint = QLabel("Clipboard mode always copies. With ydotool, non-ASCII text uses clipboard paste when backup is enabled; otherwise it is not inserted. Focus safety needs KDE window detection (check Doctor).")
                 hint.setWordWrap(True)
                 page_layout.addWidget(hint)
             elif name == "Appearance":
