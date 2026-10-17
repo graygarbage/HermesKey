@@ -2,9 +2,10 @@
 Type=Application
 Version=1.0
 Name=HermesKey Control Center
-Comment=Open HermesKey status, diagnostics, logs, and config tools
+Comment=Legacy shortcut to HermesKey Settings
 Exec=@BIN_DEST@/hermeskey-control-center
 Icon=hermeskey
 Terminal=false
+NoDisplay=true
 Categories=Utility;AudioVideo;Settings;
 Keywords=speech;dictation;whisper;wayland;control;settings;

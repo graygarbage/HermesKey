@@ -113,8 +113,8 @@ printf 'Config file:   %s\n' "$CONFIG_DEST"
 printf 'Version file:  %s\n' "$VERSION_DEST"
 printf 'Hotkey target: %s\n' "$BIN_DEST/hermeskey"
 printf 'Launchers:     %s\n' "$APPLICATIONS_DEST"
-printf 'Control app:   %s\n' "$BIN_DEST/hermeskey-control-center"
-printf 'Settings UI:   %s (preview)\n\n' "$BIN_DEST/hermeskey-settings.py"
+printf 'Settings UI:   %s\n' "$BIN_DEST/hermeskey-settings.py"
+printf 'App launcher:  %s\n\n' "$APPLICATIONS_DEST/hermeskey-settings.desktop"
 
 if [[ "${HERMESKEY_INSTALL_CONTEXT:-}" != "bootstrap" ]]; then
   printf 'Suggested next steps:\n'

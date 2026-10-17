@@ -1,64 +1,6 @@
 #!/usr/bin/env bash
+# Compatibility entry point for existing shortcuts and pinned launchers.
+# The native Settings window now hosts support actions on its System page.
 set -euo pipefail
-
-show_menu_kdialog() {
-  kdialog --title "HermesKey Control Center" --menu "Choose an action" \
-    status "Show runtime status" \
-    doctor "Run diagnostics" \
-    config "Open config file" \
-    settings "Settings window (preview)" \
-    logs "View logs" \
-    restart "Restart services"
-}
-
-show_menu_zenity() {
-  zenity --list \
-    --title="HermesKey Control Center" \
-    --width=540 \
-    --height=320 \
-    --column="Action" \
-    --column="Description" \
-    status "Show runtime status" \
-    doctor "Run diagnostics" \
-    config "Open config file" \
-    settings "Settings window (preview)" \
-    logs "View logs" \
-    restart "Restart services"
-}
-
-run_action() {
-  case "$1" in
-    status) exec hermeskey-desktop-status ;;
-    doctor) exec hermeskey-desktop-doctor ;;
-    config) exec hermeskey-open-config ;;
-    settings) exec hermeskey-settings.py ;;
-    logs) exec hermeskey-open-logs ;;
-    restart) exec hermeskey-restart-services ;;
-    *) exit 1 ;;
-  esac
-}
-
-if command -v kdialog >/dev/null 2>&1; then
-  choice="$(show_menu_kdialog || true)"
-  [[ -n "$choice" ]] || exit 0
-  run_action "$choice"
-fi
-
-if command -v zenity >/dev/null 2>&1; then
-  choice="$(show_menu_zenity || true)"
-  [[ -n "$choice" ]] || exit 0
-  choice="${choice%%|*}"
-  run_action "$choice"
-fi
-
-cat <<'EOF'
-HermesKey Control Center
-
-Available actions:
-  hermeskey-desktop-status
-  hermeskey-desktop-doctor
-  hermeskey-open-config
-  hermeskey-settings.py
-  hermeskey-open-logs
-  hermeskey-restart-services
-EOF
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+exec "$SCRIPT_DIR/hermeskey-settings.py" "$@"

@@ -6,5 +6,6 @@ Comment=Open the HermesKey configuration file
 Exec=@BIN_DEST@/hermeskey-open-config
 Icon=hermeskey
 Terminal=false
+NoDisplay=true
 Categories=Settings;Utility;
 Keywords=speech;dictation;config;settings;

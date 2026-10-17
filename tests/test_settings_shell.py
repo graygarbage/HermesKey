@@ -27,11 +27,28 @@ class SettingsShellTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         cls.SettingsWindow = module.SettingsWindow
+        cls.module = module
         cls.parse_sources = staticmethod(module.parse_json_sources)
 
     def window(self, path):
         with patch.object(self.SettingsWindow, "refresh_sources"):
             return self.SettingsWindow(path)
+
+    def test_advanced_config_uses_canonical_file_and_refuses_unsaved_edits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\n")
+            window = self.window(config)
+            window.model_picker.setCurrentIndex(window.model_picker.findData("tiny"))
+            with patch.object(self.module.QDesktopServices, "openUrl", return_value=True) as opened, \
+                 patch.object(QMessageBox, "information") as info:
+                window.system_panel.config_button.click()
+                opened.assert_not_called()
+                info.assert_called_once()
+                window.model_picker.setCurrentIndex(window.model_picker.findData("medium"))
+                window.system_panel.config_button.click()
+                self.assertEqual(opened.call_args.args[0].toLocalFile(), str(config))
+            window.close()
 
     def test_system_panel_does_not_confuse_active_with_ready(self):
         with tempfile.TemporaryDirectory() as directory:
