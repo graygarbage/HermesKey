@@ -1,6 +1,8 @@
 """Validate startup polling and transcript checks without a live model."""
 import importlib.util
+import io
 import tempfile
+from contextlib import redirect_stdout
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -31,14 +33,34 @@ class VerifyInstallTests(unittest.TestCase):
     @patch.object(verify_install, "request", side_effect=[{"status": "ok", "ready": True},
                                                           {"status": "error", "error": "decoder failed"}])
     def test_reports_transcription_error(self, _request):
-        with self.assertRaisesRegex(RuntimeError, "decoder failed"):
+        with self.assertRaisesRegex(RuntimeError, "check local service diagnostics") as result:
             verify_install.verify("/tmp/example.sock", self.sample, 60, 15)
+        self.assertNotIn("decoder failed", str(result.exception))
 
     @patch.object(verify_install, "request", side_effect=[{"status": "ok", "ready": True},
                                                           {"status": "ok", "text": ""}])
     def test_rejects_empty_transcript(self, _request):
         with self.assertRaisesRegex(RuntimeError, "expected words"):
             verify_install.verify("/tmp/example.sock", self.sample, 60, 15)
+
+    def test_custom_sample_text_never_appears_on_success_or_failure(self):
+        marker = "PRIVATE_SYNTHETIC_TRANSCRIPT_DO_NOT_PRINT"
+        stdout = io.StringIO()
+        with patch.object(verify_install.subprocess, "run", return_value=Mock(returncode=0)), \
+             patch.object(verify_install, "request", side_effect=[
+                 {"status": "ok", "ready": True},
+                 {"status": "ok", "text": f"This is a test of speech recognition. {marker}"},
+             ]), redirect_stdout(stdout):
+            verify_install.verify("/tmp/example.sock", self.sample, 60, 15)
+        self.assertIn("Speech smoke test passed.", stdout.getvalue())
+        self.assertNotIn(marker, stdout.getvalue())
+
+        stdout = io.StringIO()
+        with patch.object(verify_install, "request", side_effect=[
+                 {"status": "ok", "ready": True}, {"status": "ok", "text": marker},
+             ]), redirect_stdout(stdout), self.assertRaises(RuntimeError) as result:
+            verify_install.verify("/tmp/example.sock", self.sample, 60, 15)
+        self.assertNotIn(marker, stdout.getvalue() + str(result.exception))
 
     @patch.object(verify_install.time, "sleep")
     @patch.object(verify_install.time, "monotonic", side_effect=[0, 0, 0, 10, 11])
