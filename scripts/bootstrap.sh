@@ -173,7 +173,7 @@ HERMESKEY_INSTALL_CONTEXT=bootstrap HERMESKEY_VENV="$VENV_DIR" bash "$ROOT/insta
 
 step "Waiting for model and verifying transcription"
 if ! python3 "$ROOT/scripts/verify-install.py" \
-  --socket "${HERMESKEY_SMOKE_SOCKET:-${XDG_RUNTIME_DIR:-/tmp}/hermeskey.sock}" \
+  --socket "${HERMESKEY_SMOKE_SOCKET:-${XDG_RUNTIME_DIR:-/run/user/$UID}/hermeskey.sock}" \
   --model-timeout "${HERMESKEY_MODEL_TIMEOUT:-600}" \
   --smoke-timeout "${HERMESKEY_SMOKE_TIMEOUT:-180}"; then
   fail "HermesKey files were installed, but runtime validation failed. See errors above and run hermeskey-doctor."

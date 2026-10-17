@@ -82,4 +82,4 @@ PASTE_SHORTCUT=auto
 
 ## Runtime overrides
 
-All settings can also be overridden via environment variables at launch time.
+All settings can also be overridden via environment variables at launch time. Runtime overrides for `WAV`, `STATE`, `OVERLAY_STATE`, `SOCK`, `SERVER_PID` and `TARGET_STATE` must point directly inside an owner-only user runtime directory (`$XDG_RUNTIME_DIR`, or `/run/user/$UID` if unset). HermesKey refuses shared directories, symlinks, or existing files owned/readable by another user rather than storing recordings or PID state in `/tmp`. The speech server also refuses a socket outside a private user-owned directory. Stop any active recording **before upgrading**: older PID-only state cannot safely identify the original process after this change, so stale state is discarded without signaling its PID.

@@ -6,7 +6,8 @@ ROOT="$PWD"
 TMP="$(mktemp -d)"
 cleanup() {
   if [[ -f "$TMP/runtime/hermeskey_recording.pid" ]]; then
-    kill "$(<"$TMP/runtime/hermeskey_recording.pid")" 2>/dev/null || true
+    state="$(<"$TMP/runtime/hermeskey_recording.pid")"
+    kill "${state%%:*}" 2>/dev/null || true
   fi
   if [[ -n "${socket_pid:-}" ]]; then
     kill "$socket_pid" 2>/dev/null || true
@@ -220,8 +221,11 @@ run_case 'hello123' 0 auto
 [[ ! -e "$TMP/events" && ! -e "$TMP/clipboard" ]]
 chmod 600 "$TMP/runtime/typing.sock"
 chmod 755 "$TMP/runtime"
-run_case 'hello123' 0 auto
-[[ ! -e "$TMP/events" && ! -e "$TMP/clipboard" ]]
+if "$ROOT/bin/hermeskey" >"$TMP/rejected"; then
+  echo 'Recording started in a nonprivate runtime directory' >&2
+  exit 1
+fi
+[[ ! -e "$TMP/runtime/hermeskey_recording.pid" ]]
 chmod 700 "$TMP/runtime"
 unset TEST_SOCKET_OVERRIDE
 run_case 'hello123' 0 auto

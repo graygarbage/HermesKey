@@ -66,7 +66,9 @@ def verify(socket_path: str, sample: Path, model_timeout: int, smoke_timeout: in
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--socket", default=os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "hermeskey.sock"))
+    parser.add_argument("--socket", default=os.path.join(
+        os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "hermeskey.sock"
+    ))
     parser.add_argument("--sample", type=Path, default=Path(__file__).resolve().parent.parent / "tests/smoke.wav")
     parser.add_argument("--model-timeout", type=int, default=600)
     parser.add_argument("--smoke-timeout", type=int, default=180)
