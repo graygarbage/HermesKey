@@ -11,10 +11,15 @@ cleanup() {
   if [[ -n "${socket_pid:-}" ]]; then
     kill "$socket_pid" 2>/dev/null || true
   fi
+  if [[ -n "${untrusted_pid:-}" ]]; then
+    kill "$untrusted_pid" 2>/dev/null || true
+  fi
   rm -rf "$TMP"
 }
 trap cleanup EXIT
-mkdir -p "$TMP/bin" "$TMP/runtime" "$TMP/state" "$TMP/config"
+mkdir -p "$TMP/bin" "$TMP/runtime" "$TMP/state" "$TMP/config" "$TMP/shared"
+chmod 700 "$TMP/runtime"
+chmod 777 "$TMP/shared"
 
 cat >"$TMP/bin/ffmpeg" <<'EOF'
 #!/usr/bin/env bash
@@ -93,12 +98,26 @@ PY
 socket_pid=$!
 for _ in {1..30}; do [[ -S "$TMP/runtime/typing.sock" ]] && break; sleep 0.05; done
 [[ -S "$TMP/runtime/typing.sock" ]]
+chmod 600 "$TMP/runtime/typing.sock"
+# A fake socket outside the private runtime directory is never trusted.
+/usr/bin/python3 - "$TMP/shared/untrusted.sock" <<'PY' &
+import socket,sys,time
+s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+s.bind(sys.argv[1]);s.listen(1);time.sleep(90)
+PY
+untrusted_pid=$!
+for _ in {1..30}; do [[ -S "$TMP/shared/untrusted.sock" ]] && break; sleep 0.05; done
+[[ -S "$TMP/shared/untrusted.sock" ]]
+if grep -Fq '/tmp/.ydotool_socket' "$ROOT/bin/hermeskey"; then
+  echo 'Shared ydotool socket fallback was reintroduced' >&2
+  exit 1
+fi
 
 run_case() {
   local text="$1" copy="$2" shortcut="$3" backend="${4:-ydotool}"
   export TEST_TEXT="$text"
   printf '%s\n' 'OVERLAY_ENABLED=0' 'SOUND_ENABLED=0' 'INSERT_MODE=type' \
-    "FOCUS_SAFE_MODE=${TEST_FOCUS_SAFE:-0}" "COPY_TO_CLIPBOARD=$copy" "TYPE_BACKEND=$backend" "YDOTOOL_SOCKET_PATH=$TMP/runtime/typing.sock" \
+    "FOCUS_SAFE_MODE=${TEST_FOCUS_SAFE:-0}" "COPY_TO_CLIPBOARD=$copy" "TYPE_BACKEND=$backend" "YDOTOOL_SOCKET_PATH=${TEST_SOCKET_OVERRIDE:-$TMP/runtime/typing.sock}" \
     "PASTE_SHORTCUT=$shortcut" >"$HERMESKEY_CONFIG"
   rm -f "$TMP/clipboard" "$TMP/events" "$TMP/notifications" "$TMP/typed" "$TMP/backend-argv" "$TMP/app-argv"
   "$ROOT/bin/hermeskey" >/dev/null
@@ -174,6 +193,39 @@ run_case 'hello123' 1 auto
 [[ "$(<"$TMP/clipboard")" == hello123 && ! -e "$TMP/typed" ]]
 grep -q 'backend lacks private input' "$TMP/result"
 unset TEST_UNKNOWN TEST_OLD_YDOTOOL
+
+TEST_SOCKET_OVERRIDE="$TMP/runtime/absent.sock"
+run_case 'hello123' 0 auto
+[[ ! -e "$TMP/events" && ! -e "$TMP/clipboard" ]]
+
+TEST_SOCKET_OVERRIDE="$TMP/shared/untrusted.sock"
+run_case 'hello123' 0 auto
+[[ ! -e "$TMP/events" && ! -e "$TMP/clipboard" ]]
+grep -q 'socket unavailable or untrusted' "$TMP/notifications"
+run_case 'hello123' 1 ctrl-v
+[[ ! -e "$TMP/events" && "$(<"$TMP/clipboard")" == hello123 ]]
+grep -q 'typing socket unavailable or untrusted' "$TMP/result"
+run_case 'Français été' 1 ctrl-v
+[[ ! -e "$TMP/events" && "$(<"$TMP/clipboard")" == 'Français été' ]]
+grep -q 'paste shortcut failed' "$TMP/result"
+
+ln -s "$TMP/shared/untrusted.sock" "$TMP/runtime/symlink.sock"
+TEST_SOCKET_OVERRIDE="$TMP/runtime/symlink.sock"
+run_case 'hello123' 0 auto
+[[ ! -e "$TMP/events" && ! -e "$TMP/clipboard" ]]
+
+TEST_SOCKET_OVERRIDE="$TMP/runtime/typing.sock"
+chmod 666 "$TMP/runtime/typing.sock"
+run_case 'hello123' 0 auto
+[[ ! -e "$TMP/events" && ! -e "$TMP/clipboard" ]]
+chmod 600 "$TMP/runtime/typing.sock"
+chmod 755 "$TMP/runtime"
+run_case 'hello123' 0 auto
+[[ ! -e "$TMP/events" && ! -e "$TMP/clipboard" ]]
+chmod 700 "$TMP/runtime"
+unset TEST_SOCKET_OVERRIDE
+run_case 'hello123' 0 auto
+[[ "$(<"$TMP/events")" == type && "$(<"$TMP/typed")" == hello123 ]]
 
 TEST_FAIL_TYPE=1; export TEST_FAIL_TYPE
 run_case 'hello123' 0 auto
