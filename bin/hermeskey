@@ -325,17 +325,22 @@ app_matches_patterns() {
   local caption="$4"
   [[ -n "$patterns" ]] || return 1
 
-  python3 - "$patterns" "$desktop_file" "$resource_class" "$caption" <<'PY'
+  # A window caption can contain private document names or user text. Never
+  # expose it (or custom patterns) through a subprocess command line.
+  printf '%s\0' "$patterns" "$desktop_file" "$resource_class" "$caption" | python3 -c '
 import re
 import sys
 
-patterns = [p.strip() for p in sys.argv[1].split(',') if p.strip()]
-hay = "\n".join(sys.argv[2:])
+fields = sys.stdin.buffer.read().split(b"\0")
+if len(fields) != 5 or fields[-1]:
+    raise SystemExit(1)
+patterns = [p.strip() for p in fields[0].decode("utf-8", errors="replace").split(",") if p.strip()]
+hay = "\n".join(field.decode("utf-8", errors="replace") for field in fields[1:4])
 for pattern in patterns:
     if re.search(pattern, hay, flags=re.IGNORECASE):
         raise SystemExit(0)
 raise SystemExit(1)
-PY
+'
 }
 
 choose_paste_shortcut() {
@@ -456,7 +461,7 @@ resolve_ydotool_socket() {
 
 type_text() {
   local text="$1"
-  local backend ydotool_bin wtype_bin xdotool_bin ysock
+  local backend ydotool_bin wtype_bin xdotool_bin ysock type_help
   backend="$(detect_type_backend)"
   ydotool_bin="$(command -v ydotool 2>/dev/null || true)"
   wtype_bin="$(command -v wtype 2>/dev/null || true)"
@@ -472,18 +477,21 @@ type_text() {
         log "ydotool selected but socket missing: $ysock"
         return 4
       fi
+      type_help="$("$ydotool_bin" type --help 2>&1 || true)"
+      # Old versions without --file cannot be given dictated text safely.
+      [[ "$type_help" == *--file* ]] || return 7
       local timing=(--key-delay "$TYPE_KEY_DELAY")
       # --key-hold exists in ydotool >= 1.0 only (Debian/Ubuntu ship 0.1.x).
-      if "$ydotool_bin" type --help 2>&1 | grep -q -- '--key-hold'; then
+      if [[ "$type_help" == *--key-hold* ]]; then
         timing+=(--key-hold "$TYPE_KEY_HOLD")
       fi
-      YDOTOOL_SOCKET="$ysock" "$ydotool_bin" type "${timing[@]}" -- "$text"
+      printf '%s' "$text" | YDOTOOL_SOCKET="$ysock" "$ydotool_bin" type "${timing[@]}" --file=-
       ;;
     wtype)
-      "$wtype_bin" "$text"
+      printf '%s' "$text" | "$wtype_bin" -
       ;;
     xdotool)
-      "$xdotool_bin" type --clearmodifiers --delay "$TYPE_KEY_DELAY" -- "$text"
+      printf '%s' "$text" | "$xdotool_bin" type --clearmodifiers --delay "$TYPE_KEY_DELAY" --file -
       ;;
     none)
       return 2
@@ -657,8 +665,13 @@ insert_text() {
 
   # With clipboard backup disabled, never copy behind the user's back.
   if [[ "$COPY_TO_CLIPBOARD" != "1" ]]; then
-    log "Insertion failed (code $rc); clipboard backup disabled, no text copied."
-    notify-send "$APP_NAME" "Typing failed; no text copied (clipboard backup disabled)." || true
+    if (( rc == 7 )); then
+      log "Typing backend cannot accept private input safely; no text inserted or copied."
+      notify-send "$APP_NAME" "Typing backend cannot accept private text safely. Nothing inserted or copied." || true
+    else
+      log "Insertion failed (code $rc); clipboard backup disabled, no text copied."
+      notify-send "$APP_NAME" "Typing failed; no text copied (clipboard backup disabled)." || true
+    fi
     echo "Not inserted or copied (typing failed)."
     return 0
   fi
@@ -681,6 +694,11 @@ insert_text() {
       log "Paste fallback is not available for this backend."
       notify-send "$APP_NAME" "Paste fallback unavailable for this typing backend." || true
       echo "Copied to clipboard (paste fallback unavailable)."
+      ;;
+    7)
+      log "Typing backend cannot accept private input safely; transcript on clipboard."
+      notify-send "$APP_NAME" "Typing backend cannot accept private text safely. Paste from clipboard manually." || true
+      echo "Copied to clipboard (backend lacks private input)."
       ;;
     2|3)
       log "No supported typing backend found for active app insertion."
@@ -732,8 +750,9 @@ ensure_server() {
     notify-send "$APP_NAME" "Speech model is still loading…" || true
   else
     rm -f "$SOCK"
-    log "Starting STT server (model=$MODEL lang=${STT_LANG:-auto})"
-    nohup "$PYTHON_STT" "$SERVER_SCRIPT" --socket "$SOCK" --model "$MODEL" --lang "$STT_LANG" >>"$SERVER_LOG" 2>&1 &
+    log "Starting STT server"
+    SOCK="$SOCK" MODEL="$MODEL" STT_LANG="$STT_LANG" \
+      nohup "$PYTHON_STT" "$SERVER_SCRIPT" >>"$SERVER_LOG" 2>&1 &
     echo $! >"$SERVER_PID"
   fi
 

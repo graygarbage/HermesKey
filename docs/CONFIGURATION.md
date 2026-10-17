@@ -33,7 +33,7 @@ TYPE_BACKEND=auto
 - `INSERT_MODE=type` types into the active app
 - `INSERT_MODE=clipboard` only copies to clipboard
 - `COPY_TO_CLIPBOARD=1` allows clipboard backup and paste. On Wayland, `ydotool type` can silently drop non-ASCII characters even with exit status 0; HermesKey therefore sends a paste shortcut for non-ASCII transcripts when the active app is identifiable. If the app is unknown or the shortcut fails, the transcript stays on the clipboard for manual paste. With `COPY_TO_CLIPBOARD=0` in type mode, HermesKey will **not** silently change your clipboard: unsupported Unicode or other typing failures produce an explicit warning without inserting or copying text. Clipboard-only mode always copies even when the backup option is disabled; the GUI preserves your backup preference when you return to typing mode.
-- `TYPE_BACKEND` may be `auto`, `ydotool`, `wtype`, or `xdotool`
+- `TYPE_BACKEND` may be `auto`, `ydotool`, `wtype`, or `xdotool`. Direct typing sends text through the backend's standard input, not process arguments. If an older `ydotool` lacks stdin (`--file=-`) support, HermesKey refuses unsafe typing: a backup remains available for manual paste only when `COPY_TO_CLIPBOARD=1`; otherwise it does not insert or copy the text.
 
 ```bash
 TYPE_KEY_DELAY=1

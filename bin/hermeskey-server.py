@@ -155,7 +155,10 @@ class Server:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--socket", default=os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "hermeskey.sock"))
+    parser.add_argument(
+        "--socket",
+        default=os.environ.get("SOCK") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "hermeskey.sock"),
+    )
     parser.add_argument("--model", default=os.environ.get("MODEL", "medium"))
     parser.add_argument("--lang", default=os.environ.get("STT_LANG", "en"))
     args = parser.parse_args()

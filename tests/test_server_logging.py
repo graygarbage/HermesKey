@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import logging
+import os
 import sys
 import tempfile
 import types
@@ -81,6 +82,22 @@ class ServerLoggingTests(unittest.TestCase):
              patch.object(server_module.logger, "info") as info:
             self.server.load()
         self.assertNotIn(secret, str(info.call_args_list))
+
+    def test_service_uses_environment_without_private_model_in_argv(self):
+        secret = "PRIVATE_SYNTHETIC_MODEL_PATH"
+        unit = MODULE.parents[1] / "systemd/user/hermeskey.service"
+        text = unit.read_text()
+        self.assertIn("EnvironmentFile=", text)
+        self.assertIn("exec ", text)
+        self.assertNotIn("--model", text)
+        self.assertNotIn("--lang", text)
+        self.assertNotIn("--socket", text)
+        with patch.dict(os.environ, {"SOCK": "/tmp/private-test.sock", "MODEL": secret, "STT_LANG": ""}), \
+             patch.object(server_module, "Server") as server, \
+             patch.object(server_module.signal, "signal"), \
+             patch.object(sys, "argv", ["hermeskey-server.py"]):
+            self.assertEqual(server_module.main(), 0)
+        server.assert_called_once_with("/tmp/private-test.sock", secret, "")
 
     def test_startup_failure_has_no_raw_traceback(self):
         secret = "PRIVATE_STARTUP_ERROR"

@@ -31,17 +31,37 @@ cat >"$TMP/bin/python3" <<'EOF'
 if [[ "${1:-}" == '-' && -n "${REQUEST_WAV:-}" ]]; then
   TEST_TEXT="$TEST_TEXT" exec /usr/bin/python3 -c 'import json,os; print(json.dumps({"status":"ok","text":os.environ["TEST_TEXT"]}))'
 else
+  if [[ "${1:-}" == -c && "${2:-}" == *'patterns ='* ]]; then
+    printf '%s\0' "$@" >"$TEST_TMP/app-argv"
+  fi
   exec /usr/bin/python3 "$@"
 fi
 EOF
 cat >"$TMP/bin/ydotool" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == type && "${2:-}" == --help ]]; then
-  echo '--key-hold'; exit 0
+  if [[ "${TEST_OLD_YDOTOOL:-0}" == 1 ]]; then echo '--key-hold'; else echo '--key-hold --file=PATH'; fi
+  exit 0
 fi
+printf '%s\0' "$@" >"$TEST_TMP/backend-argv"
 printf '%s\n' "$1" >>"$TEST_TMP/events"
+if [[ "$1" == type ]]; then cat >"$TEST_TMP/typed"; fi
 [[ "$1" != key || "${TEST_FAIL_KEY:-0}" != 1 ]] || exit 4
 [[ "$1" != type || "${TEST_FAIL_TYPE:-0}" != 1 ]] || exit 4
+EOF
+cat >"$TMP/bin/wtype" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\0' "$@" >"$TEST_TMP/backend-argv"
+[[ "$*" == '-' ]] || exit 4
+printf 'type\n' >>"$TEST_TMP/events"
+cat >"$TEST_TMP/typed"
+EOF
+cat >"$TMP/bin/xdotool" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\0' "$@" >"$TEST_TMP/backend-argv"
+[[ "${1:-}" == type ]] || exit 4
+printf 'type\n' >>"$TEST_TMP/events"
+cat >"$TEST_TMP/typed"
 EOF
 cat >"$TMP/bin/wl-copy" <<'EOF'
 #!/usr/bin/env bash
@@ -60,7 +80,7 @@ cat >"$TMP/bin/qdbus" <<'EOF'
 #!/usr/bin/env bash
 [[ "${TEST_UNKNOWN:-0}" != 1 ]] || exit 0
 printf '%s\n' "uuid: ${TEST_UUID:-11111111-1111-1111-1111-111111111111}" \
-  'desktopFile: org.kde.konsole' 'resourceClass: konsole' 'caption: test window'
+  'desktopFile: org.kde.konsole' 'resourceClass: konsole' "caption: ${TEST_CAPTION:-test window}"
 EOF
 chmod +x "$TMP/bin/"*
 export TEST_TMP="$TMP" PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
@@ -75,12 +95,12 @@ for _ in {1..30}; do [[ -S "$TMP/runtime/typing.sock" ]] && break; sleep 0.05; d
 [[ -S "$TMP/runtime/typing.sock" ]]
 
 run_case() {
-  local text="$1" copy="$2" shortcut="$3"
+  local text="$1" copy="$2" shortcut="$3" backend="${4:-ydotool}"
   export TEST_TEXT="$text"
   printf '%s\n' 'OVERLAY_ENABLED=0' 'SOUND_ENABLED=0' 'INSERT_MODE=type' \
-    "FOCUS_SAFE_MODE=${TEST_FOCUS_SAFE:-0}" "COPY_TO_CLIPBOARD=$copy" 'TYPE_BACKEND=ydotool' "YDOTOOL_SOCKET_PATH=$TMP/runtime/typing.sock" \
+    "FOCUS_SAFE_MODE=${TEST_FOCUS_SAFE:-0}" "COPY_TO_CLIPBOARD=$copy" "TYPE_BACKEND=$backend" "YDOTOOL_SOCKET_PATH=$TMP/runtime/typing.sock" \
     "PASTE_SHORTCUT=$shortcut" >"$HERMESKEY_CONFIG"
-  rm -f "$TMP/clipboard" "$TMP/events" "$TMP/notifications"
+  rm -f "$TMP/clipboard" "$TMP/events" "$TMP/notifications" "$TMP/typed" "$TMP/backend-argv" "$TMP/app-argv"
   "$ROOT/bin/hermeskey" >/dev/null
   if [[ "${TEST_SWITCH_FOCUS:-0}" == 1 ]]; then
     TEST_UUID=22222222-2222-2222-2222-222222222222; export TEST_UUID
@@ -126,7 +146,34 @@ grep -q 'clipboard backup' "$TMP/notifications"
 
 run_case 'hello123' 0 auto
 [[ ! -e "$TMP/clipboard" ]]
-[[ "$(<"$TMP/events")" == type ]]
+[[ "$(<"$TMP/events")" == type && "$(<"$TMP/typed")" == hello123 ]]
+grep -aFq -- '--file=-' "$TMP/backend-argv"
+if grep -aFq -- 'hello123' "$TMP/backend-argv"; then echo 'Transcript in ydotool argv' >&2; exit 1; fi
+
+run_case 'SYNTHETIC_WTYPE_TEXT' 0 auto wtype
+[[ "$(<"$TMP/typed")" == SYNTHETIC_WTYPE_TEXT && ! -e "$TMP/clipboard" ]]
+if grep -aFq -- 'SYNTHETIC_WTYPE_TEXT' "$TMP/backend-argv"; then echo 'Transcript in wtype argv' >&2; exit 1; fi
+
+run_case 'SYNTHETIC_XDOTOOL_TEXT' 0 auto xdotool
+[[ "$(<"$TMP/typed")" == SYNTHETIC_XDOTOOL_TEXT && ! -e "$TMP/clipboard" ]]
+grep -aFq -- '--file' "$TMP/backend-argv"
+if grep -aFq -- 'SYNTHETIC_XDOTOOL_TEXT' "$TMP/backend-argv"; then echo 'Transcript in xdotool argv' >&2; exit 1; fi
+
+TEST_CAPTION=PRIVATE_SYNTHETIC_WINDOW_TITLE; export TEST_CAPTION
+run_case 'hello123' 1 auto
+[[ -e "$TMP/app-argv" ]]
+if grep -aFq -- "$TEST_CAPTION" "$TMP/app-argv"; then echo 'Window caption in Python argv' >&2; exit 1; fi
+unset TEST_CAPTION
+
+TEST_OLD_YDOTOOL=1; export TEST_OLD_YDOTOOL
+run_case 'hello123' 0 auto
+[[ ! -e "$TMP/clipboard" && ! -e "$TMP/typed" ]]
+grep -q 'cannot accept private text safely' "$TMP/notifications"
+TEST_UNKNOWN=1; export TEST_UNKNOWN
+run_case 'hello123' 1 auto
+[[ "$(<"$TMP/clipboard")" == hello123 && ! -e "$TMP/typed" ]]
+grep -q 'backend lacks private input' "$TMP/result"
+unset TEST_UNKNOWN TEST_OLD_YDOTOOL
 
 TEST_FAIL_TYPE=1; export TEST_FAIL_TYPE
 run_case 'hello123' 0 auto
