@@ -114,6 +114,9 @@ TEST_FAIL_CLIP=1; export TEST_FAIL_CLIP
 run_case 'ไทย' 1 auto
 [[ ! -e "$TMP/clipboard" && ! -e "$TMP/events" ]]
 grep -q 'not inserted or copied' "$TMP/result"
+run_case 'hello123' 1 auto
+[[ ! -e "$TMP/clipboard" && "$(<"$TMP/events")" == type ]]
+grep -q 'clipboard backup failed' "$TMP/result"
 unset TEST_FAIL_CLIP
 
 run_case 'Привет мир' 0 auto

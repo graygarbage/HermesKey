@@ -624,6 +624,12 @@ insert_text() {
     return 0
   fi
 
+  # Never paste whatever was previously on the clipboard if backing up the
+  # current transcript failed. Printable ASCII can still be typed directly.
+  if (( ! copy_ok )); then
+    want_paste=0
+  fi
+
   # Capture the backend's exit code directly; `rc=$?` after an if/fi block
   # would always read 0 and hide the real failure reason.
   # Pasting needs the transcript on the clipboard; with COPY_TO_CLIPBOARD=0
@@ -639,7 +645,12 @@ insert_text() {
     type_text "$text" || rc=$?
     if (( rc == 0 )); then
       log "Typed transcription into active app (${#text} chars)."
-      echo "Typed into active app."
+      if (( ! copy_ok )); then
+        notify-send "$APP_NAME" "Text was typed, but clipboard backup failed." || true
+        echo "Typed into active app (clipboard backup failed)."
+      else
+        echo "Typed into active app."
+      fi
       return 0
     fi
   fi
