@@ -7,12 +7,14 @@ ROOT="$PWD"
 TMP="$(mktemp -d)"
 cleanup() {
   if [[ -f "$TMP/runtime/hermeskey_recording.pid" ]]; then
-    kill "$(<"$TMP/runtime/hermeskey_recording.pid")" 2>/dev/null || true
+    state="$(<"$TMP/runtime/hermeskey_recording.pid")"
+    kill "${state%%:*}" 2>/dev/null || true
   fi
   rm -rf "$TMP"
 }
 trap cleanup EXIT
 mkdir -p "$TMP/bin" "$TMP/runtime" "$TMP/state" "$TMP/config"
+chmod 700 "$TMP/runtime"
 
 printf '%s\n' 'OVERLAY_ENABLED=0' 'SOUND_ENABLED=0' 'INSERT_MODE=clipboard' \
   'COPY_TO_CLIPBOARD=1' 'CLIP_CMD=wl-copy' >"$TMP/config/hermeskey.env"

@@ -28,7 +28,10 @@ MODEL="${MODEL:-medium}"
 # Unset -> en; set but empty (STT_LANG=) -> auto-detect.
 STT_LANG="${STT_LANG-en}"
 
-RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+# Never put audio or process state at predictable names in shared /tmp. The
+# per-user runtime directory exists during a graphical login; refuse toggles
+# if it is unavailable instead of creating files in a public directory.
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$UID}"
 WAV="${WAV:-$RUNTIME_DIR/hermeskey_audio.wav}"
 KEEP_AUDIO="${KEEP_AUDIO:-0}"
 STATE="${STATE:-$RUNTIME_DIR/hermeskey_recording.pid}"
@@ -36,7 +39,7 @@ OVERLAY_STATE="${OVERLAY_STATE:-$RUNTIME_DIR/hermeskey_overlay.pid}"
 SOCK="${SOCK:-$RUNTIME_DIR/hermeskey.sock}"
 SERVER_PID="${SERVER_PID:-$RUNTIME_DIR/hermeskey_server.pid}"
 TARGET_STATE="${TARGET_STATE:-$RUNTIME_DIR/hermeskey_target.env}"
-# Keep the lock in a private per-user directory, including when runtime falls back to /tmp.
+# Keep the lock in the user's state directory.
 TOGGLE_LOCK="$STATE_DIR/toggle.lock"
 
 RECORD_SOURCE="${RECORD_SOURCE:-default}"
@@ -81,6 +84,42 @@ mkdir -p "$(dirname -- "$LOG")" "$(dirname -- "$SERVER_LOG")" "$(dirname -- "$OV
 touch "$LOG"
 
 log() { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
+
+private_runtime_ready() {
+  local mode path
+  [[ "$RUNTIME_DIR" == /* && -d "$RUNTIME_DIR" && ! -L "$RUNTIME_DIR" ]] || return 1
+  [[ "$(stat -c %u -- "$RUNTIME_DIR" 2>/dev/null)" == "$UID" ]] || return 1
+  mode="$(stat -c %a -- "$RUNTIME_DIR" 2>/dev/null)" || return 1
+  [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  (( (8#$mode & 077) == 0 )) || return 1
+  for path in "$WAV" "$STATE" "$OVERLAY_STATE" "$SOCK" "$SERVER_PID" "$TARGET_STATE"; do
+    [[ "${path%/*}" == "$RUNTIME_DIR" && ! -L "$path" ]] || return 1
+    if [[ -e "$path" ]]; then
+      [[ "$(stat -c %u -- "$path" 2>/dev/null)" == "$UID" ]] || return 1
+      mode="$(stat -c %a -- "$path" 2>/dev/null)" || return 1
+      [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+      (( (8#$mode & 077) == 0 )) || return 1
+      if [[ "$path" == "$SOCK" ]]; then
+        [[ -S "$path" ]] || return 1
+      else
+        [[ -f "$path" ]] || return 1
+      fi
+    fi
+  done
+}
+
+# /proc records a process's kernel start time, which protects against PID
+# reuse and against accidentally signaling a PID read from stale state.
+process_start_ticks() {
+  local pid="$1" stat_line
+  [[ "$pid" =~ ^[0-9]+$ && -r "/proc/$pid/stat" ]] || return 1
+  IFS= read -r stat_line <"/proc/$pid/stat" || return 1
+  stat_line="${stat_line##*) }"
+  local -a fields
+  read -r -a fields <<<"$stat_line"
+  [[ "${fields[19]:-}" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "${fields[19]}"
+}
 
 usage() {
   cat <<EOF
@@ -380,9 +419,12 @@ focus_is_safe() {
 hide_overlay() {
   [[ "$OVERLAY_ENABLED" == "1" ]] || return 0
   if [[ -f "$OVERLAY_STATE" ]]; then
-    local pid
-    pid="$(cat "$OVERLAY_STATE" 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    local state pid ticks
+    state="$(cat "$OVERLAY_STATE" 2>/dev/null || true)"
+    pid="${state%%:*}"
+    ticks="${state#*:}"
+    if [[ "$state" == *:* && "$ticks" =~ ^[0-9]+$ && "$(process_start_ticks "$pid" 2>/dev/null || true)" == "$ticks" ]] \
+      && kill -0 "$pid" 2>/dev/null; then
       kill "$pid" 2>/dev/null || true
     fi
     rm -f "$OVERLAY_STATE"
@@ -394,7 +436,11 @@ show_overlay() {
   local mode="$1"
   hide_overlay
   nohup python3 "$OVERLAY_SCRIPT" "$mode" >>"$OVERLAY_LOG" 2>&1 &
-  echo $! >"$OVERLAY_STATE"
+  local pid=$! ticks
+  ticks="$(process_start_ticks "$pid" 2>/dev/null || true)"
+  if [[ -n "$ticks" ]]; then
+    printf '%s:%s\n' "$pid" "$ticks" >"$OVERLAY_STATE"
+  fi
 }
 
 server_ping() {
@@ -796,7 +842,11 @@ ensure_server() {
 }
 
 record_start() {
-  rm -f "$WAV" 2>/dev/null || true
+  if ! rm -f -- "$WAV"; then
+    log "Could not clear previous audio; recording refused."
+    notify-send "$APP_NAME" "Cannot safely prepare audio file; no recording started." || true
+    return 1
+  fi
 
   ensure_server
   if [[ "$FOCUS_SAFE_MODE" == "1" ]]; then
@@ -805,14 +855,22 @@ record_start() {
   play_tone "$START_TONE_HZ"
   show_overlay recording
 
-  log "Starting recording from: $RECORD_SOURCE -> $WAV"
+  log "Starting recording"
   ffmpeg -y \
     -f pulse -i "$RECORD_SOURCE" \
     -ac 1 -ar 16000 \
     -loglevel error \
     "$WAV" &
-  echo $! >"$STATE"
-  log "ffmpeg pid: $(cat "$STATE")"
+  local pid=$! ticks
+  ticks="$(process_start_ticks "$pid" 2>/dev/null || true)"
+  if [[ -z "$ticks" ]]; then
+    log "Recorder exited before its process state could be verified."
+    hide_overlay
+    notify-send "$APP_NAME" "Recording could not start safely." || true
+    return 1
+  fi
+  printf '%s:%s\n' "$pid" "$ticks" >"$STATE"
+  log "Recording process started"
 }
 
 request_transcription() {
@@ -871,9 +929,21 @@ record_stop_and_transcribe() {
     return
   fi
 
-  local pid
-  pid="$(cat "$STATE")"
-  log "Stopping ffmpeg pid: $pid"
+  local state pid ticks
+  state="$(cat "$STATE" 2>/dev/null || true)"
+  pid="${state%%:*}"
+  ticks="${state#*:}"
+  if [[ "$state" != *:* || ! "$ticks" =~ ^[0-9]+$ ]] \
+    || [[ "$(process_start_ticks "$pid" 2>/dev/null || true)" != "$ticks" ]]; then
+    log "Recording process state is stale or untrusted; no PID signaled."
+    rm -f "$STATE"
+    discard_audio
+    hide_overlay
+    notify-send "$APP_NAME" "Recording state invalid; no process signaled." || true
+    echo "Recording state invalid; no process signaled."
+    return 0
+  fi
+  log "Stopping verified recording process"
 
   if kill -0 "$pid" 2>/dev/null; then
     kill "$pid" 2>/dev/null || true
@@ -940,6 +1010,11 @@ record_stop_and_transcribe() {
 
 case "${1:-}" in
   "")
+    if ! private_runtime_ready; then
+      log "No private runtime directory or an unsafe runtime path; refusing to record."
+      notify-send "$APP_NAME" "Private runtime unavailable. No recording or typing started." || true
+      exit 1
+    fi
     # flock owns the lock; -o prevents the recording/server/overlay children
     # from inheriting it after the toggle process exits. Do not queue presses:
     # a queued press could immediately stop a recording that just started.
@@ -955,6 +1030,7 @@ case "${1:-}" in
     fi
     ;;
   --locked-toggle)
+    private_runtime_ready || { log "Unsafe runtime path; refusing toggle."; exit 1; }
     # Only the outer flock invocation enters this path. Its lock spans the
     # whole transition, including transcription and text insertion.
     if [[ -f "$STATE" ]]; then

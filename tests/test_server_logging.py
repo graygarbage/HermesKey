@@ -92,12 +92,43 @@ class ServerLoggingTests(unittest.TestCase):
         self.assertNotIn("--model", text)
         self.assertNotIn("--lang", text)
         self.assertNotIn("--socket", text)
-        with patch.dict(os.environ, {"SOCK": "/tmp/private-test.sock", "MODEL": secret, "STT_LANG": ""}), \
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(os.environ, {"SOCK": f"{directory}/private-test.sock", "MODEL": secret, "STT_LANG": ""}), \
              patch.object(server_module, "Server") as server, \
              patch.object(server_module.signal, "signal"), \
              patch.object(sys, "argv", ["hermeskey-server.py"]):
             self.assertEqual(server_module.main(), 0)
-        server.assert_called_once_with("/tmp/private-test.sock", secret, "")
+        server.assert_called_once_with(f"{directory}/private-test.sock", secret, "")
+
+    def test_server_refuses_shared_or_symlinked_socket_paths(self):
+        with self.assertRaises(ValueError):
+            server_module.validate_private_socket("/tmp/hermeskey-untrusted-test.sock")
+        with tempfile.TemporaryDirectory() as directory:
+            socket_path = Path(directory) / "speech.sock"
+            server_module.validate_private_socket(str(socket_path))
+            Path(directory).chmod(0o755)
+            with self.assertRaises(ValueError):
+                server_module.validate_private_socket(str(socket_path))
+            Path(directory).chmod(0o700)
+            target = Path(directory) / "target.txt"
+            target.write_text("untouched")
+            socket_path.symlink_to(target)
+            with self.assertRaises(ValueError):
+                server_module.validate_private_socket(str(socket_path))
+            self.assertEqual(target.read_text(), "untouched")
+
+    def test_rejected_socket_path_is_never_unlinked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / "do-not-remove.txt"
+            file.write_text("preserved")
+            Path(directory).chmod(0o755)
+            with patch.object(server_module.signal, "signal"), \
+                 patch.object(server_module, "WhisperModel") as load_model, \
+                 patch.object(server_module.logger, "error"), \
+                 patch.object(sys, "argv", ["hermeskey-server.py", "--socket", str(file)]):
+                self.assertEqual(server_module.main(), 1)
+            load_model.assert_not_called()
+            self.assertEqual(file.read_text(), "preserved")
 
     def test_startup_failure_has_no_raw_traceback(self):
         secret = "PRIVATE_STARTUP_ERROR"

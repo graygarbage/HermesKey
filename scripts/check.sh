@@ -27,6 +27,9 @@ systemd-analyze --user verify systemd/user/hermeskey.service systemd/user/hermes
 echo "Hotkey concurrency"
 bash scripts/test-toggle-lock.sh
 
+echo "Private runtime and process state"
+bash scripts/test-private-runtime.sh
+
 echo "Unicode insertion policy"
 bash scripts/test-unicode-insertion.sh
 

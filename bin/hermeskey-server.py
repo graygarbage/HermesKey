@@ -6,6 +6,7 @@ import os
 import re
 import signal
 import socket
+import stat
 import sys
 
 from faster_whisper import WhisperModel
@@ -25,6 +26,20 @@ logger.addHandler(safe_handler)
 
 def log(msg: str) -> None:
     logger.info("%s", msg)
+
+
+def validate_private_socket(path: str) -> None:
+    """Never bind/unlink a socket in a shared directory or follow a symlink."""
+    directory = os.path.dirname(path)
+    parent = os.lstat(directory)
+    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or parent.st_mode & 0o077:
+        raise ValueError("Speech socket needs a private user-owned runtime directory")
+    try:
+        existing = os.lstat(path)
+    except FileNotFoundError:
+        return
+    if not stat.S_ISSOCK(existing.st_mode) or existing.st_uid != os.getuid() or existing.st_mode & 0o077:
+        raise ValueError("Speech socket path is not a private user-owned socket")
 
 
 def log_failure(stage: str, exc: Exception) -> None:
@@ -53,6 +68,7 @@ class Server:
         self.language = language
         self.model = None
         self._sock = None
+        self._bound_socket = False
         self._running = True
 
     def load(self) -> None:
@@ -67,12 +83,15 @@ class Server:
                 self._sock.close()
             except Exception:
                 pass
-        try:
-            os.unlink(self.socket_path)
-        except FileNotFoundError:
-            pass
-        except Exception as e:
-            log_failure("socket cleanup", e)
+        if self._bound_socket:
+            try:
+                os.unlink(self.socket_path)
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                log_failure("socket cleanup", e)
+            finally:
+                self._bound_socket = False
 
     def handle(self, request: dict) -> dict:
         cmd = request.get("cmd")
@@ -117,7 +136,11 @@ class Server:
             return {"status": "error", "error": "server request failed; see hermeskey.service journal"}
 
     def serve(self) -> None:
-        self.cleanup()
+        validate_private_socket(self.socket_path)
+        # Remove only an existing, validated socket owned by this user. Never
+        # unlink a path merely because a rejected config points at it.
+        if os.path.lexists(self.socket_path):
+            os.unlink(self.socket_path)
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._sock = sock
         # Create the socket file with owner-only permissions from the start.
@@ -126,6 +149,7 @@ class Server:
         old_umask = os.umask(0o177)
         try:
             sock.bind(self.socket_path)
+            self._bound_socket = True
         finally:
             os.umask(old_umask)
         os.chmod(self.socket_path, 0o600)
@@ -157,7 +181,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--socket",
-        default=os.environ.get("SOCK") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "hermeskey.sock"),
+        default=os.environ.get("SOCK") or os.path.join(
+            os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "hermeskey.sock"
+        ),
     )
     parser.add_argument("--model", default=os.environ.get("MODEL", "medium"))
     parser.add_argument("--lang", default=os.environ.get("STT_LANG", "en"))
@@ -174,6 +200,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop)
 
     try:
+        validate_private_socket(args.socket)
         server.load()
         server.serve()
     except Exception as e:
