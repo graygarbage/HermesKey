@@ -445,17 +445,23 @@ copy_text() {
 }
 
 resolve_ydotool_socket() {
-  local ysock
-  ysock="${YDOTOOL_SOCKET_PATH:-${YDOTOOL_SOCKET:-}}"
-  if [[ -z "$ysock" ]]; then
-    if [[ -S "/run/user/$UID/.ydotool_socket" ]]; then
-      ysock="/run/user/$UID/.ydotool_socket"
-    elif [[ -S "/tmp/.ydotool_socket" ]]; then
-      ysock="/tmp/.ydotool_socket"
-    else
-      ysock="/run/user/$UID/.ydotool_socket"
-    fi
-  fi
+  # Never auto-select a socket in a shared directory. Even explicit overrides
+  # must stay in the user's private runtime directory: the socket accepts
+  # virtual keyboard events, including dictated text.
+  local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$UID}" ysock mode
+  runtime_dir="${runtime_dir%/}"
+  [[ "$runtime_dir" == /* && -d "$runtime_dir" && ! -L "$runtime_dir" ]] || return 1
+  [[ "$(stat -c %u -- "$runtime_dir" 2>/dev/null)" == "$UID" ]] || return 1
+  mode="$(stat -c %a -- "$runtime_dir" 2>/dev/null)" || return 1
+  [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  (( (8#$mode & 077) == 0 )) || return 1
+
+  ysock="${YDOTOOL_SOCKET_PATH:-${YDOTOOL_SOCKET:-$runtime_dir/.ydotool_socket}}"
+  [[ "${ysock%/*}" == "$runtime_dir" && -S "$ysock" && ! -L "$ysock" ]] || return 1
+  [[ "$(stat -c %u -- "$ysock" 2>/dev/null)" == "$UID" ]] || return 1
+  mode="$(stat -c %a -- "$ysock" 2>/dev/null)" || return 1
+  [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  (( (8#$mode & 077) == 0 )) || return 1
   printf '%s\n' "$ysock"
 }
 
@@ -469,12 +475,15 @@ type_text() {
   [[ -n "$ydotool_bin" ]] || ydotool_bin=/usr/bin/ydotool
   [[ -n "$wtype_bin" ]] || wtype_bin=/usr/bin/wtype
   [[ -n "$xdotool_bin" ]] || xdotool_bin=/usr/bin/xdotool
-  ysock="$(resolve_ydotool_socket)"
 
   case "$backend" in
     ydotool)
+      if ! ysock="$(resolve_ydotool_socket)"; then
+        log "Trusted ydotool socket unavailable; refusing typing."
+        return 8
+      fi
       if [[ ! -S "$ysock" ]]; then
-        log "ydotool selected but socket missing: $ysock"
+        log "ydotool socket disappeared before typing"
         return 4
       fi
       type_help="$("$ydotool_bin" type --help 2>&1 || true)"
@@ -514,12 +523,15 @@ paste_text() {
   xdotool_bin="$(command -v xdotool 2>/dev/null || true)"
   [[ -n "$ydotool_bin" ]] || ydotool_bin=/usr/bin/ydotool
   [[ -n "$xdotool_bin" ]] || xdotool_bin=/usr/bin/xdotool
-  ysock="$(resolve_ydotool_socket)"
 
   case "$backend" in
     ydotool)
+      if ! ysock="$(resolve_ydotool_socket)"; then
+        log "Trusted ydotool socket unavailable; refusing paste."
+        return 8
+      fi
       if [[ ! -S "$ysock" ]]; then
-        log "ydotool selected but socket missing: $ysock"
+        log "ydotool socket disappeared before paste"
         return 4
       fi
       case "$shortcut" in
@@ -668,6 +680,9 @@ insert_text() {
     if (( rc == 7 )); then
       log "Typing backend cannot accept private input safely; no text inserted or copied."
       notify-send "$APP_NAME" "Typing backend cannot accept private text safely. Nothing inserted or copied." || true
+    elif (( rc == 8 )); then
+      log "Typing daemon socket unavailable or untrusted; no text inserted or copied."
+      notify-send "$APP_NAME" "Typing daemon socket unavailable or untrusted. Nothing inserted or copied." || true
     else
       log "Insertion failed (code $rc); clipboard backup disabled, no text copied."
       notify-send "$APP_NAME" "Typing failed; no text copied (clipboard backup disabled)." || true
@@ -699,6 +714,11 @@ insert_text() {
       log "Typing backend cannot accept private input safely; transcript on clipboard."
       notify-send "$APP_NAME" "Typing backend cannot accept private text safely. Paste from clipboard manually." || true
       echo "Copied to clipboard (backend lacks private input)."
+      ;;
+    8)
+      log "Typing daemon socket unavailable or untrusted; transcript on clipboard."
+      notify-send "$APP_NAME" "Typing daemon socket unavailable or untrusted. Paste from clipboard manually." || true
+      echo "Copied to clipboard (typing socket unavailable or untrusted)."
       ;;
     2|3)
       log "No supported typing backend found for active app insertion."
