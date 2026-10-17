@@ -31,7 +31,9 @@ def request(path: str, payload: dict, timeout: float = 5) -> dict:
 
 def verify(socket_path: str, sample: Path, model_timeout: int, smoke_timeout: int) -> None:
     deadline = time.monotonic() + model_timeout
-    print(f"Waiting up to {model_timeout}s for speech model to load/download...", flush=True)
+    offline = os.environ.get("HERMESKEY_OFFLINE", "0") == "1"
+    phase = "offline speech model to load" if offline else "speech model to load/download"
+    print(f"Waiting up to {model_timeout}s for {phase}...", flush=True)
     last_message = 0.0
     while True:
         try:
@@ -41,9 +43,13 @@ def verify(socket_path: str, sample: Path, model_timeout: int, smoke_timeout: in
         except (OSError, ValueError):
             pass  # Socket only appears after model load finishes.
         if time.monotonic() >= deadline:
+            if offline:
+                raise RuntimeError("offline model not ready; cache it first or select a local model path")
             raise RuntimeError("speech server did not become ready before the timeout")
         if time.monotonic() - last_message >= 15:
-            print("Model not ready yet; first run may download from Hugging Face...", flush=True)
+            message = ("Offline model not ready; cache it first or select a local model path."
+                       if offline else "Model not ready yet; first run may download from Hugging Face...")
+            print(message, flush=True)
             last_message = time.monotonic()
         time.sleep(2)
 
