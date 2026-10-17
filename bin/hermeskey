@@ -418,12 +418,23 @@ detect_type_backend() {
   echo none
 }
 
+# ydotool emits keyboard events, not Unicode text. On KDE Wayland it can
+# return success while dropping accents and entire non-Latin scripts. Check
+# bytes in the C locale; printable ASCII is the only safe direct-type subset.
+needs_unicode_paste() (
+  LC_ALL=C
+  [[ "$1" == *[!\ -\~]* ]]
+)
+
 COPIED=0
 
 copy_text() {
   local text="$1"
   [[ "$COPIED" == "1" ]] && return 0
-  printf '%s' "$text" | "$CLIP_CMD"
+  if ! printf '%s' "$text" | "$CLIP_CMD"; then
+    log "Clipboard copy command failed."
+    return 1
+  fi
   COPIED=1
   log "Copied transcription to clipboard (${#text} chars)."
 }
@@ -535,18 +546,34 @@ paste_text() {
 
 insert_text() {
   local text="$1"
-  local rc=0
+  local rc=0 unicode_paste=0 backend copy_ok=1
 
-  # COPY_TO_CLIPBOARD=1 keeps a backup copy even when typing succeeds.
-  # With 0, the clipboard is only used when it is the only way to deliver
-  # the text (clipboard mode, focus changed, typing failed).
+  # COPY_TO_CLIPBOARD=1 allows a backup and paste. Clipboard-only mode is
+  # explicit consent to copy regardless of the backup preference.
   if [[ "$COPY_TO_CLIPBOARD" == "1" || "$INSERT_MODE" != "type" ]]; then
-    copy_text "$text"
+    copy_text "$text" || copy_ok=0
   fi
 
   if [[ "$INSERT_MODE" != "type" ]]; then
-    echo "Copied to clipboard."
+    if (( copy_ok )); then
+      echo "Copied to clipboard."
+    else
+      log "Clipboard copy failed; no text inserted or copied."
+      notify-send "$APP_NAME" "Clipboard copy failed. No transcript inserted or copied." || true
+      echo "Clipboard copy failed."
+    fi
     return 0
+  fi
+
+  backend="$(detect_type_backend)"
+  if [[ "$backend" == "ydotool" ]] && needs_unicode_paste "$text"; then
+    unicode_paste=1
+    if [[ "$COPY_TO_CLIPBOARD" != "1" || "$copy_ok" != "1" ]]; then
+      log "Unicode transcript not inserted: clipboard backup disabled or failed."
+      notify-send "$APP_NAME" "Unicode typing needs clipboard paste. Enable/repair clipboard backup; no text was inserted or copied." || true
+      echo "Unicode text not inserted or copied (clipboard unavailable)."
+      return 0
+    fi
   fi
 
   sleep 0.12
@@ -554,7 +581,7 @@ insert_text() {
   # Look up the focused window once: it's where the keystrokes will go, so
   # it decides paste-vs-type and is compared with the recording target.
   local want_paste=0
-  if [[ "$COPY_TO_CLIPBOARD" == "1" && -n "$PASTE_FOR_APPS" ]]; then
+  if [[ "$COPY_TO_CLIPBOARD" == "1" && -n "$PASTE_FOR_APPS" || "$unicode_paste" == "1" ]]; then
     want_paste=1
   fi
   CURRENT_UUID="" CURRENT_DESKTOP_FILE="" CURRENT_RESOURCE_CLASS="" CURRENT_CAPTION=""
@@ -564,9 +591,36 @@ insert_text() {
   fi
 
   if ! focus_is_safe; then
-    copy_text "$text"
-    notify-send "$APP_NAME" "Focus changed. Transcript copied to clipboard only." || true
-    echo "Copied to clipboard (focus changed)."
+    if [[ "$COPY_TO_CLIPBOARD" == "1" && "$copy_ok" == "1" ]]; then
+      notify-send "$APP_NAME" "Focus changed. Transcript copied to clipboard only." || true
+      echo "Copied to clipboard (focus changed)."
+    else
+      log "Focus changed; transcript not inserted or copied (clipboard unavailable)."
+      notify-send "$APP_NAME" "Focus changed. No text inserted or copied (clipboard unavailable)." || true
+      echo "Not inserted or copied (focus changed)."
+    fi
+    return 0
+  fi
+
+  if (( unicode_paste )); then
+    # When the active app cannot be identified, auto-selecting Ctrl+V vs
+    # Ctrl+Shift+V is unsafe (especially in terminals). Keep the backup for
+    # manual paste instead. An explicit shortcut is the user's choice.
+    if [[ "$PASTE_SHORTCUT" == "auto" && -z "$CURRENT_DESKTOP_FILE" && -z "$CURRENT_RESOURCE_CLASS" ]]; then
+      log "Unicode transcript copied; active app unknown, paste shortcut not sent."
+      notify-send "$APP_NAME" "Unicode transcript copied. Paste manually into your app." || true
+      echo "Copied to clipboard (paste target unknown)."
+      return 0
+    fi
+    paste_text "$CURRENT_DESKTOP_FILE" "$CURRENT_RESOURCE_CLASS" "$CURRENT_CAPTION" || rc=$?
+    if (( rc == 0 )); then
+      log "Sent Unicode paste shortcut (${#text} chars); transcript backed up on clipboard."
+      echo "Paste shortcut sent; transcript on clipboard."
+    else
+      log "Unicode paste shortcut unavailable (code $rc); transcript backed up on clipboard."
+      notify-send "$APP_NAME" "Could not paste Unicode transcript. It is on the clipboard; paste manually." || true
+      echo "Copied to clipboard (paste shortcut failed)."
+    fi
     return 0
   fi
 
@@ -590,9 +644,22 @@ insert_text() {
     fi
   fi
 
-  # Insertion failed: make sure the transcript is not lost.
-  copy_text "$text"
+  # With clipboard backup disabled, never copy behind the user's back.
+  if [[ "$COPY_TO_CLIPBOARD" != "1" ]]; then
+    log "Insertion failed (code $rc); clipboard backup disabled, no text copied."
+    notify-send "$APP_NAME" "Typing failed; no text copied (clipboard backup disabled)." || true
+    echo "Not inserted or copied (typing failed)."
+    return 0
+  fi
 
+  if (( ! copy_ok )); then
+    log "Typing failed (code $rc); clipboard backup also failed."
+    notify-send "$APP_NAME" "Typing and clipboard backup failed. No transcript inserted or copied." || true
+    echo "Typing and clipboard backup failed."
+    return 0
+  fi
+
+  # Insertion failed; the transcript is already backed up on the clipboard.
   case "$rc" in
     4)
       log "ydotool is installed but ydotoold is not running."

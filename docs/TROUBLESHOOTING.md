@@ -41,6 +41,20 @@ Configure device access through your distro's udev/logind setup; do **not**
 run the HermesKey user service as root or use `chmod 666 /dev/uinput` (that
 would allow every local user to inject input).
 
+### Accents, Chinese, or other Unicode text disappears when typing
+
+`ydotool type` sends keyboard events, not Unicode text. It can report success
+while dropping non-ASCII characters. With `COPY_TO_CLIPBOARD=1` (the default),
+HermesKey copies a backup and uses the active app's paste shortcut for Unicode.
+If the app cannot be identified or the paste shortcut fails, paste the backup
+manually (`Ctrl+Shift+V` in most terminals, `Ctrl+V` in most GUI editors).
+Alternatively set `INSERT_MODE=clipboard` for explicit copy-only behavior.
+With `COPY_TO_CLIPBOARD=0` in type mode, HermesKey will warn but **will not
+silently modify the clipboard** or attempt unsupported Unicode typing; enable
+clipboard backup or clipboard-only mode if you need to insert Unicode text.
+The model's language support and installed fonts are separate questions.
+See [issue #54](https://github.com/graygarbage/HermesKey/issues/54).
+
 ## Transcription fails
 
 Check the prewarmed server:

@@ -32,7 +32,7 @@ TYPE_BACKEND=auto
 
 - `INSERT_MODE=type` types into the active app
 - `INSERT_MODE=clipboard` only copies to clipboard
-- `COPY_TO_CLIPBOARD=1` keeps a backup copy even when typing succeeds. Clipboard-only mode always copies, even if the backup option is disabled; the GUI preserves your backup preference for when you return to typing mode.
+- `COPY_TO_CLIPBOARD=1` allows clipboard backup and paste. On Wayland, `ydotool type` can silently drop non-ASCII characters even with exit status 0; HermesKey therefore sends a paste shortcut for non-ASCII transcripts when the active app is identifiable. If the app is unknown or the shortcut fails, the transcript stays on the clipboard for manual paste. With `COPY_TO_CLIPBOARD=0` in type mode, HermesKey will **not** silently change your clipboard: unsupported Unicode or other typing failures produce an explicit warning without inserting or copying text. Clipboard-only mode always copies even when the backup option is disabled; the GUI preserves your backup preference when you return to typing mode.
 - `TYPE_BACKEND` may be `auto`, `ydotool`, `wtype`, or `xdotool`
 
 ```bash
@@ -61,7 +61,7 @@ TONE_VOLUME=0.20
 FOCUS_SAFE_MODE=0
 ```
 
-If enabled, HermesKey checks that focus is still on the window you started recording in before inserting. If focus moved, the transcript goes to the clipboard instead.
+If enabled, HermesKey checks that focus is still on the window you started recording in before inserting. If focus moved, the transcript goes to the clipboard **only when `COPY_TO_CLIPBOARD=1`**; otherwise a notification explains why nothing was inserted or copied.
 
 This and the paste fallback below need active window detection (KDE Plasma). HermesKey uses `kdotool` if it is installed, and otherwise a small built-in KWin script, which needs `python3-dbus` and `python3-gobject` (usually already installed with Plasma). `hermeskey-doctor` shows which method is in use. Without either, text is always typed.
 
@@ -78,7 +78,7 @@ PASTE_SHORTCUT=auto
 - `PASTE_FOR_APPS` is a comma-separated pattern list
 - `PASTE_SHORTCUT=auto` picks `Ctrl+Shift+V` for terminal-like apps and `Ctrl+V` elsewhere
 - the check uses the window that is focused when the text is inserted
-- pasting needs the clipboard, so with `COPY_TO_CLIPBOARD=0` text is typed instead
+- pasting needs the clipboard; with `COPY_TO_CLIPBOARD=0`, printable ASCII is typed instead, while non-ASCII with ydotool is not inserted and triggers a notification. Paste is never attempted if the configured focus-safety check detects that the active window changed.
 
 ## Runtime overrides
 
