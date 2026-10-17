@@ -30,10 +30,22 @@ from PySide6.QtWidgets import (
 from hermeskey_audio_sources import SourceDiscoveryError, parse_json_sources, parse_short_sources
 from hermeskey_settings_config import ConfigDocument, ConfigError, canonical_path
 
+CUSTOM = "custom:"  # not a valid literal model ID or language code
+MODEL_PRESETS = (
+    ("Tiny — lowest resource use", "tiny"), ("Base", "base"),
+    ("Small", "small"), ("Medium — default", "medium"),
+    ("Large v3", "large-v3"), ("Large v3 Turbo", "large-v3-turbo"),
+)
+LANGUAGE_PRESETS = (
+    ("Auto-detect", ""), ("English", "en"), ("Spanish", "es"),
+    ("French", "fr"), ("German", "de"), ("Portuguese", "pt"),
+    ("Italian", "it"), ("Japanese", "ja"), ("Korean", "ko"),
+    ("Chinese", "zh"), ("Hawaiian", "haw"), ("Cantonese", "yue"),
+)
 SECTIONS = (
-    ("Speech", "Choose the input for the next recording, plus model and language."),
-    ("Input", "Typing, clipboard, and focus options will appear here."),
-    ("Appearance", "Overlay and audio cue options will appear here."),
+    ("Speech", "Choose the input, model and spoken language. Selecting a model does not download it."),
+    ("Input", "Control typing, clipboard backup and focus safety."),
+    ("Appearance", "Toggle the overlay and audio cues."),
     ("System", "Service status and diagnostic actions will appear here."),
 )
 
@@ -85,14 +97,28 @@ class SettingsWindow(QMainWindow):
             page_layout.addWidget(detail)
             if name == "Speech":
                 form = QFormLayout()
+                self.model_picker = QComboBox()
+                self.model_picker.setObjectName("model_picker")
+                for label, value in MODEL_PRESETS:
+                    self.model_picker.addItem(label, value)
+                self.model_picker.addItem("Custom model ID or local path…", CUSTOM)
                 self.model_edit = QLineEdit()
                 self.model_edit.setObjectName("model_edit")
-                self.model_edit.setPlaceholderText("medium or owner/model-id")
+                self.model_edit.setPlaceholderText("owner/model-id or /path/to/model")
+                self.model_custom_label = QLabel("Custom model:")
+                self.language_picker = QComboBox()
+                self.language_picker.setObjectName("language_picker")
+                for label, value in LANGUAGE_PRESETS:
+                    self.language_picker.addItem(label, value)
+                self.language_picker.addItem("Other language code…", CUSTOM)
                 self.language_edit = QLineEdit()
                 self.language_edit.setObjectName("language_edit")
-                self.language_edit.setPlaceholderText("en (empty = auto-detect)")
-                form.addRow("Model:", self.model_edit)
-                form.addRow("Language:", self.language_edit)
+                self.language_edit.setPlaceholderText("Whisper language code, e.g. nl")
+                self.language_custom_label = QLabel("Other code:")
+                form.addRow("Model:", self.model_picker)
+                form.addRow(self.model_custom_label, self.model_edit)
+                form.addRow("Language:", self.language_picker)
+                form.addRow(self.language_custom_label, self.language_edit)
                 self.source_picker = QComboBox()
                 self.source_picker.setObjectName("source_picker")
                 self.source_picker.addItem("System default microphone (follows desktop setting)", "default")
@@ -107,6 +133,30 @@ class SettingsWindow(QMainWindow):
                 page_layout.addWidget(self.source_status)
                 self.refresh_button.clicked.connect(self.refresh_sources)
                 self.monitor_toggle.toggled.connect(self.populate_sources)
+            elif name == "Input":
+                form = QFormLayout()
+                self.insert_picker = QComboBox()
+                self.insert_picker.setObjectName("insert_picker")
+                self.insert_picker.addItem("Type into the active app", "type")
+                self.insert_picker.addItem("Copy to clipboard only", "clipboard")
+                form.addRow("Insert mode:", self.insert_picker)
+                self.clipboard_backup = QCheckBox("Keep a clipboard backup when typing")
+                self.clipboard_backup.setObjectName("clipboard_backup")
+                self.focus_safe = QCheckBox("Avoid inserting when focus changes")
+                self.focus_safe.setObjectName("focus_safe")
+                form.addRow("", self.clipboard_backup)
+                form.addRow("", self.focus_safe)
+                page_layout.addLayout(form)
+                hint = QLabel("Clipboard mode always copies text. Focus safety needs KDE window detection; check Doctor if it cannot detect windows.")
+                hint.setWordWrap(True)
+                page_layout.addWidget(hint)
+            elif name == "Appearance":
+                self.overlay_toggle = QCheckBox("Show recording and transcribing overlay")
+                self.overlay_toggle.setObjectName("overlay_toggle")
+                self.sound_toggle = QCheckBox("Play start and stop cues")
+                self.sound_toggle.setObjectName("sound_toggle")
+                page_layout.addWidget(self.overlay_toggle)
+                page_layout.addWidget(self.sound_toggle)
             page_layout.addStretch()
             self.pages.addWidget(page)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
@@ -131,15 +181,19 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(self.buttons)
 
         if self.document is None:
-            self.model_edit.setEnabled(False)
-            self.language_edit.setEnabled(False)
-            self.source_picker.setEnabled(False)
-            self.refresh_button.setEnabled(False)
-            self.monitor_toggle.setEnabled(False)
+            for widget in (self.model_picker, self.model_edit, self.language_picker, self.language_edit,
+                           self.source_picker, self.refresh_button, self.monitor_toggle, self.insert_picker,
+                           self.clipboard_backup, self.focus_safe, self.overlay_toggle, self.sound_toggle):
+                widget.setEnabled(False)
             self.notice.setText(f"Cannot load config: {self.load_error}. Edit it manually or rerun the installer.")
         else:
-            self.model_edit.setText(self.document.values["MODEL"])
-            self.language_edit.setText(self.document.values["STT_LANG"])
+            self.select_existing(self.model_picker, self.model_edit, self.document.values["MODEL"])
+            self.select_existing(self.language_picker, self.language_edit, self.document.values["STT_LANG"])
+            self.insert_picker.setCurrentIndex(self.insert_picker.findData(self.document.values["INSERT_MODE"]))
+            self.clipboard_backup.setChecked(self.document.values["COPY_TO_CLIPBOARD"] == "1")
+            self.focus_safe.setChecked(self.document.values["FOCUS_SAFE_MODE"] == "1")
+            self.overlay_toggle.setChecked(self.document.values["OVERLAY_ENABLED"] == "1")
+            self.sound_toggle.setChecked(self.document.values["SOUND_ENABLED"] == "1")
             self.populate_sources()
             self.refresh_sources()
             self.notice.setText(f"Editing {self.path}. Other settings and comments are preserved.")
@@ -148,9 +202,17 @@ class SettingsWindow(QMainWindow):
                 or os.environ.get("HERMESKEY_CONFIG")
             ):
                 self.notice.setText(self.notice.text() + " Custom config overrides are not used by the systemd service.")
+        self.model_picker.currentIndexChanged.connect(self.update_model_control)
+        self.language_picker.currentIndexChanged.connect(self.update_language_control)
+        self.insert_picker.currentIndexChanged.connect(self.update_insert_mode)
         self.model_edit.textChanged.connect(self.update_buttons)
         self.language_edit.textChanged.connect(self.update_buttons)
         self.source_picker.currentIndexChanged.connect(self.update_buttons)
+        for toggle in (self.clipboard_backup, self.focus_safe, self.overlay_toggle, self.sound_toggle):
+            toggle.toggled.connect(self.update_buttons)
+        self.update_model_control()
+        self.update_language_control()
+        self.update_insert_mode()
         self.update_buttons()
 
     def refresh_sources(self) -> None:
@@ -243,11 +305,43 @@ class SettingsWindow(QMainWindow):
         self._source_initialized = True
         self.update_buttons()
 
+    @staticmethod
+    def select_existing(picker: QComboBox, editor: QLineEdit, value: str) -> None:
+        index = picker.findData(value)
+        if index < 0:
+            index = picker.findData(CUSTOM)
+        picker.setCurrentIndex(index)
+        editor.setText(value)
+
+    def update_model_control(self) -> None:
+        custom = self.model_picker.currentData() == CUSTOM
+        self.model_edit.setHidden(not custom)
+        self.model_custom_label.setHidden(not custom)
+        self.update_buttons()
+
+    def update_language_control(self) -> None:
+        custom = self.language_picker.currentData() == CUSTOM
+        self.language_edit.setHidden(not custom)
+        self.language_custom_label.setHidden(not custom)
+        self.update_buttons()
+
+    def update_insert_mode(self) -> None:
+        self.clipboard_backup.setEnabled(self.document is not None and self.insert_picker.currentData() == "type")
+        self.update_buttons()
+
     def changes(self) -> dict[str, str]:
         if self.document is None:
             return {}
-        proposed = {"MODEL": self.model_edit.text(), "STT_LANG": self.language_edit.text(),
-                    "RECORD_SOURCE": self.source_picker.currentData()}
+        proposed = {
+            "MODEL": self.model_edit.text() if self.model_picker.currentData() == CUSTOM else self.model_picker.currentData(),
+            "STT_LANG": self.language_edit.text() if self.language_picker.currentData() == CUSTOM else self.language_picker.currentData(),
+            "RECORD_SOURCE": self.source_picker.currentData(),
+            "INSERT_MODE": self.insert_picker.currentData(),
+            "COPY_TO_CLIPBOARD": "1" if self.clipboard_backup.isChecked() else "0",
+            "FOCUS_SAFE_MODE": "1" if self.focus_safe.isChecked() else "0",
+            "OVERLAY_ENABLED": "1" if self.overlay_toggle.isChecked() else "0",
+            "SOUND_ENABLED": "1" if self.sound_toggle.isChecked() else "0",
+        }
         return {key: value for key, value in proposed.items() if self.document.values[key] != value}
 
     def update_buttons(self) -> None:
@@ -263,8 +357,8 @@ class SettingsWindow(QMainWindow):
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=".hermeskey-check-",
                                          dir=path.parent, delete=False) as stream:
             check_path = Path(stream.name)
-            stream.write(f'MODEL={values["MODEL"]}\nSTT_LANG={values["STT_LANG"]}\n'
-                         f'RECORD_SOURCE={values["RECORD_SOURCE"]}\n')
+            for key, value in values.items():
+                stream.write(f"{key}={value}\n")
         try:
             env = dict(os.environ, HERMESKEY_CONFIG=str(check_path))
             doctor = Path(__file__).with_name("hermeskey-doctor")
@@ -292,10 +386,9 @@ class SettingsWindow(QMainWindow):
             return False
         self.update_buttons()
         self.notice.setText(f"Saved {self.path}. Other settings and comments were preserved.")
-        # Microphone choice is read on each hotkey invocation, not by the
-        # long-lived speech server. Never restart it for a mic-only change.
+        # Hotkey behavior and microphone choice are read per invocation.
         if not ({"MODEL", "STT_LANG"} & changes.keys()):
-            self.notice.setText(self.notice.text() + " The new microphone is used for the next recording.")
+            self.notice.setText(self.notice.text() + " Changes take effect on the next hotkey invocation.")
             if close:
                 self.close()
             return True

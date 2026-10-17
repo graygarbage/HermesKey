@@ -45,17 +45,68 @@ class SettingsShellTests(unittest.TestCase):
             window.navigation.setCurrentRow(2)
             self.assertEqual(window.pages.currentIndex(), 2)
             self.assertFalse(window.save_button.isEnabled())
-            window.model_edit.setText("small")
+            window.model_picker.setCurrentIndex(window.model_picker.findData("small"))
             with patch.object(window, "validate"), patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
                 window.apply_button.click()
             self.assertTrue(window.isVisible())
             self.assertIn("MODEL=small", config.read_text())
             self.assertIn("# preserved\n", config.read_text())
             self.assertFalse(window.apply_button.isEnabled())
-            window.language_edit.setText("")
+            window.language_picker.setCurrentIndex(window.language_picker.findData(""))
             window.buttons.button(QDialogButtonBox.StandardButton.Cancel).click()
             self.assertFalse(window.isVisible())
             self.assertIn("STT_LANG=en", config.read_text())
+
+    def test_custom_model_and_language_values_are_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=owner/custom-whisper\nSTT_LANG=nl\n")
+            window = self.window(config)
+            self.assertEqual(window.model_picker.currentData(), "custom:")
+            self.assertEqual(window.model_edit.text(), "owner/custom-whisper")
+            self.assertEqual(window.language_picker.currentData(), "custom:")
+            self.assertEqual(window.language_edit.text(), "nl")
+            self.assertFalse(window.apply_button.isEnabled())
+            window.buttons.button(QDialogButtonBox.StandardButton.Cancel).click()
+            self.assertEqual(config.read_text(), "MODEL=owner/custom-whisper\nSTT_LANG=nl\n")
+
+    def test_custom_model_and_auto_language_save_without_downloading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\n")
+            window = self.window(config)
+            window.model_picker.setCurrentIndex(window.model_picker.findData("custom:"))
+            window.model_edit.setText("owner/custom-whisper")
+            window.language_picker.setCurrentIndex(window.language_picker.findData(""))
+            with patch.object(window, "validate"), patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No), \
+                 patch("subprocess.run") as run:
+                self.assertTrue(window.save_changes())
+            run.assert_not_called()
+            self.assertIn("MODEL=owner/custom-whisper", config.read_text())
+            self.assertIn("STT_LANG=\n", config.read_text())
+            window.close()
+
+    def test_behavior_only_save_does_not_restart_or_change_clipboard_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\nCOPY_TO_CLIPBOARD=0\n")
+            window = self.window(config)
+            self.assertFalse(window.clipboard_backup.isChecked())
+            window.insert_picker.setCurrentIndex(window.insert_picker.findData("clipboard"))
+            self.assertFalse(window.clipboard_backup.isEnabled())
+            self.assertFalse(window.clipboard_backup.isChecked())
+            window.overlay_toggle.setChecked(False)
+            window.sound_toggle.setChecked(False)
+            window.focus_safe.setChecked(True)
+            with patch.object(window, "validate"), patch.object(QMessageBox, "question") as question:
+                self.assertTrue(window.save_changes())
+            question.assert_not_called()
+            saved = config.read_text()
+            for line in ("INSERT_MODE=clipboard", "COPY_TO_CLIPBOARD=0", "OVERLAY_ENABLED=0",
+                         "SOUND_ENABLED=0", "FOCUS_SAFE_MODE=1", "MODEL=medium"):
+                self.assertIn(line, saved)
+            self.assertFalse(window.apply_button.isEnabled())
+            window.close()
 
     def test_microphone_picker_preserves_missing_device_and_no_model_restart(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -129,6 +180,7 @@ class SettingsShellTests(unittest.TestCase):
             config = Path(directory) / "hermeskey.env"
             config.write_text("MODEL=medium\nSTT_LANG=en\n")
             window = self.window(config)
+            window.language_picker.setCurrentIndex(window.language_picker.findData("custom:"))
             window.language_edit.setText("xyz")
             with patch.object(QMessageBox, "warning") as warning:
                 self.assertFalse(window.save_changes())
@@ -141,7 +193,7 @@ class SettingsShellTests(unittest.TestCase):
             config.write_text("MODEL=medium\nSTT_LANG=en\n")
             window = self.window(config)
             window.show()
-            window.model_edit.setText("tiny")
+            window.model_picker.setCurrentIndex(window.model_picker.findData("tiny"))
             with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
                 window.close()
             self.assertTrue(window.isVisible())

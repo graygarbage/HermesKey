@@ -6,7 +6,7 @@ HermesKey reads configuration from:
 ~/.config/hermeskey/hermeskey.env
 ```
 
-The installer copies a starter file there on first install. The Settings GUI can load and save `MODEL`, `STT_LANG` and `RECORD_SOURCE` only; it leaves other lines, comments, and unknown settings untouched. It supports simple literal model IDs/paths without spaces or shell syntax. Configurations with duplicate or complex `MODEL` / `STT_LANG` assignments must be edited manually. Saves are validated, atomic, and made owner-only (mode `0600`); if the file changed since opening Settings, reload instead of overwriting someone else's edit. No backups or values are written to logs. Other fields still use the Config launcher.
+The installer copies a starter file there on first install. The Settings GUI can load and save `MODEL`, `STT_LANG`, `RECORD_SOURCE`, `INSERT_MODE`, `COPY_TO_CLIPBOARD`, `FOCUS_SAFE_MODE`, `OVERLAY_ENABLED`, and `SOUND_ENABLED`; it leaves other lines, comments, and unknown settings untouched. It supports simple literal model IDs/paths without spaces or shell syntax. Configurations with duplicate or complex `MODEL` / `STT_LANG` assignments must be edited manually. Saves are validated, atomic, and made owner-only (mode `0600`); if the file changed since opening Settings, reload instead of overwriting someone else's edit. No backups or values are written to logs. Other fields still use the Config launcher.
 
 After changing settings, run `hermeskey-doctor --config-only` (or `hermeskey-doctor`) to check model/language settings, insertion modes, flags, and numeric options before restarting the services. Invalid settings cause a nonzero exit status; unknown model aliases and custom Hugging Face IDs/paths are warnings because they cannot be verified offline. A valid model name is not a guarantee that its download will succeed. `MODEL` and `STT_LANG` changes need a restart of `hermeskey.service`, which the GUI offers after saving but never performs without permission. The GUI targets `~/.config/hermeskey/hermeskey.env` even if `XDG_CONFIG_HOME` or `HERMESKEY_CONFIG` is set, because the systemd service currently hard-codes that path.
 
@@ -18,8 +18,8 @@ STT_LANG=en
 RECORD_SOURCE=default
 ```
 
-- `MODEL`: any supported `faster-whisper` model name
-- `STT_LANG`: spoken language code supported by faster-whisper; set empty for auto-detect (e.g. `en`, `zh`, `haw` or `yue`)
+- `MODEL`: choose a common preset or enter a custom ID/path. An existing custom model stays selected and is not replaced when you save unrelated settings. Choosing a model does not download it; loading/downloading begins when you explicitly restart the speech service.
+- `STT_LANG`: choose Auto-detect (saves an empty value), a common language, or enter another Whisper language code. Existing custom codes stay visible (e.g. `en`, `zh`, `haw` or `yue`).
 - `RECORD_SOURCE`: `default` follows the desktop's default input; the Settings microphone picker displays friendly descriptions and saves the source's internal name (not its transient numeric index). Monitor sources are hidden unless requested. An unplugged saved device stays selected and is shown as unavailable. Changing only the microphone does not restart the speech service; the next recording uses the new source.
 
 ## Insertion behavior
@@ -32,7 +32,7 @@ TYPE_BACKEND=auto
 
 - `INSERT_MODE=type` types into the active app
 - `INSERT_MODE=clipboard` only copies to clipboard
-- `COPY_TO_CLIPBOARD=1` keeps a backup copy even when typing succeeds
+- `COPY_TO_CLIPBOARD=1` keeps a backup copy even when typing succeeds. Clipboard-only mode always copies, even if the backup option is disabled; the GUI preserves your backup preference for when you return to typing mode.
 - `TYPE_BACKEND` may be `auto`, `ydotool`, `wtype`, or `xdotool`
 
 ```bash
@@ -64,6 +64,8 @@ FOCUS_SAFE_MODE=0
 If enabled, HermesKey checks that focus is still on the window you started recording in before inserting. If focus moved, the transcript goes to the clipboard instead.
 
 This and the paste fallback below need active window detection (KDE Plasma). HermesKey uses `kdotool` if it is installed, and otherwise a small built-in KWin script, which needs `python3-dbus` and `python3-gobject` (usually already installed with Plasma). `hermeskey-doctor` shows which method is in use. Without either, text is always typed.
+
+Behavior controls (`INSERT_MODE`, `COPY_TO_CLIPBOARD`, `FOCUS_SAFE_MODE`, `OVERLAY_ENABLED`, `SOUND_ENABLED`) are read on the next hotkey invocation; changing only those settings does **not** restart the speech model. If window detection is unavailable, focus safety cannot guarantee protection; run `hermeskey-doctor` to confirm support. Tone timing, typing speed, and paste patterns still require manual config editing.
 
 ## Paste fallback
 
