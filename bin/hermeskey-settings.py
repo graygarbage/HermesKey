@@ -155,10 +155,14 @@ class SettingsWindow(QMainWindow):
                 self.focus_safe.setObjectName("focus_safe")
                 form.addRow("", self.clipboard_backup)
                 form.addRow("", self.focus_safe)
+                self.privacy_button = QPushButton("Privacy-first typing (no clipboard backup)")
+                self.privacy_button.setObjectName("privacy_button")
+                form.addRow("", self.privacy_button)
                 page_layout.addLayout(form)
-                hint = QLabel("Clipboard mode always copies. With ydotool, non-ASCII text uses clipboard paste when backup is enabled; otherwise it is not inserted. Focus safety needs KDE window detection (check Doctor).")
-                hint.setWordWrap(True)
-                page_layout.addWidget(hint)
+                self.clipboard_hint = QLabel("Clipboard backup is on by default and may remain in KDE clipboard history or sync tools. Privacy-first typing prevents new HermesKey backups but does not clear existing history. Clipboard-only mode always copies; without backup, ydotool cannot insert non-ASCII text. Focus safety needs KDE window detection (check Doctor).")
+                self.clipboard_hint.setWordWrap(True)
+                page_layout.addWidget(self.clipboard_hint)
+                self.privacy_button.clicked.connect(self.select_privacy_first_typing)
             elif name == "Appearance":
                 self.overlay_toggle = QCheckBox("Show recording and transcribing overlay")
                 self.overlay_toggle.setObjectName("overlay_toggle")
@@ -198,7 +202,7 @@ class SettingsWindow(QMainWindow):
         if self.document is None:
             for widget in (self.model_picker, self.model_edit, self.language_picker, self.language_edit,
                            self.offline_toggle, self.source_picker, self.refresh_button, self.monitor_toggle, self.insert_picker,
-                           self.clipboard_backup, self.focus_safe, self.overlay_toggle, self.sound_toggle):
+                           self.clipboard_backup, self.focus_safe, self.privacy_button, self.overlay_toggle, self.sound_toggle):
                 widget.setEnabled(False)
             self.notice.setText(f"Cannot load config: {self.load_error}. Edit it manually or rerun the installer.")
         else:
@@ -404,6 +408,14 @@ class SettingsWindow(QMainWindow):
         self.clipboard_backup.setEnabled(self.document is not None and self.insert_picker.currentData() == "type")
         self.update_buttons()
 
+    def select_privacy_first_typing(self) -> None:
+        if self.document is None:
+            return
+        self.insert_picker.setCurrentIndex(self.insert_picker.findData("type"))
+        self.clipboard_backup.setChecked(False)
+        self.notice.setText("Privacy-first typing selected. Save or Apply to stop new clipboard backups; existing clipboard history is unchanged. ydotool cannot insert non-ASCII text without clipboard backup.")
+        self.update_buttons()
+
     def changes(self) -> dict[str, str]:
         if self.document is None:
             return {}
@@ -424,6 +436,8 @@ class SettingsWindow(QMainWindow):
         enabled = bool(self.changes())
         self.save_button.setEnabled(enabled)
         self.apply_button.setEnabled(enabled)
+        self.privacy_button.setEnabled(self.document is not None and
+                                       (self.insert_picker.currentData() != "type" or self.clipboard_backup.isChecked()))
 
     @staticmethod
     def validate(path: Path) -> None:
