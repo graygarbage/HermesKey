@@ -1,5 +1,6 @@
 """Offscreen settings tests; no microphone is opened or real services restarted."""
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -31,6 +32,73 @@ class SettingsShellTests(unittest.TestCase):
     def window(self, path):
         with patch.object(self.SettingsWindow, "refresh_sources"):
             return self.SettingsWindow(path)
+
+    def test_system_panel_does_not_confuse_active_with_ready(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\n")
+            window = self.window(config)
+            panel = window.system_panel
+            states = {"hermeskey.service": {"active": "active", "ready": False},
+                      "hermeskey-ydotoold.service": {"active": "active", "ready": True}}
+            def fake_process(_slot, _program, _args, finished, timeout=10000):
+                finished(True, json.dumps(states))
+                return True
+            with patch.object(panel, "run_process", side_effect=fake_process):
+                panel.refresh()
+            self.assertIn("not responding", panel.labels["hermeskey.service"].text())
+            self.assertIn("Ready", panel.labels["hermeskey-ydotoold.service"].text())
+            window.close()
+
+    def test_restart_uses_fixed_user_systemctl_and_waits_for_readiness(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\n")
+            window = self.window(config)
+            panel = window.system_panel
+            with patch.object(panel, "run_process", return_value=True) as run:
+                panel.restart_units(("hermeskey.service",))
+            self.assertEqual(run.call_args.args[:3], ("action", "systemctl",
+                                                      ["--user", "restart", "hermeskey.service"]))
+            self.assertIn("Restart requested", panel.labels["hermeskey.service"].text())
+            self.assertFalse(panel.speech_button.isEnabled())
+            panel.set_actions_enabled(True)
+            window.close()
+
+    def test_system_restart_requires_decision_about_unsaved_edits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\n")
+            window = self.window(config)
+            with patch.object(window.system_panel, "refresh"):
+                window.navigation.setCurrentRow(3)
+            window.model_picker.setCurrentIndex(window.model_picker.findData("tiny"))
+            with patch.object(window.system_panel, "restart_units") as restart, \
+                 patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Cancel):
+                window.request_service_restart(("hermeskey.service",))
+            restart.assert_not_called()
+            with patch.object(window.system_panel, "restart_units") as restart, \
+                 patch.object(QMessageBox, "question", side_effect=[QMessageBox.StandardButton.No,
+                                                                      QMessageBox.StandardButton.Yes]):
+                window.request_service_restart(("hermeskey.service",))
+            restart.assert_called_once_with(("hermeskey.service",))
+            self.assertEqual(window.model_picker.currentData(), "medium")
+            self.assertEqual(config.read_text(), "MODEL=medium\nSTT_LANG=en\n")
+            window.close()
+
+    def test_system_restart_can_save_first_without_automatic_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\n")
+            window = self.window(config)
+            window.model_picker.setCurrentIndex(window.model_picker.findData("tiny"))
+            with patch.object(window, "validate"), patch.object(window.system_panel, "restart_units") as restart, \
+                 patch.object(QMessageBox, "question", side_effect=[QMessageBox.StandardButton.Yes,
+                                                                      QMessageBox.StandardButton.Yes]):
+                window.request_service_restart(("hermeskey.service",))
+            restart.assert_called_once_with(("hermeskey.service",))
+            self.assertIn("MODEL=tiny", config.read_text())
+            window.close()
 
     def test_navigation_apply_save_and_cancel(self):
         with tempfile.TemporaryDirectory() as directory:
