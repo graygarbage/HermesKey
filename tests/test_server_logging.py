@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import os
+import subprocess
 import sys
 import tempfile
 import types
@@ -82,6 +83,45 @@ class ServerLoggingTests(unittest.TestCase):
              patch.object(server_module.logger, "info") as info:
             self.server.load()
         self.assertNotIn(secret, str(info.call_args_list))
+
+    def test_offline_model_load_never_requests_a_download(self):
+        with patch.dict(os.environ, {"HERMESKEY_OFFLINE": "1"}), \
+             patch.object(server_module, "WhisperModel", return_value=Mock()) as model:
+            offline = server_module.Server("/tmp/not-used.sock", "medium", "en")
+            offline.load()
+        self.assertTrue(model.call_args.kwargs["local_files_only"])
+        with patch.dict(os.environ, {"HERMESKEY_OFFLINE": "0"}), \
+             patch.object(server_module, "WhisperModel", return_value=Mock()) as model:
+            server_module.Server("/tmp/not-used.sock", "medium", "en").load()
+        self.assertFalse(model.call_args.kwargs["local_files_only"])
+
+    def test_offline_missing_model_omits_private_path(self):
+        secret = "PRIVATE_SYNTHETIC_MODEL_FOLDER"
+        with patch.dict(os.environ, {"HERMESKEY_OFFLINE": "1"}), \
+             patch.object(server_module, "WhisperModel", side_effect=OSError(secret)), \
+             patch.object(server_module.logger, "info") as info:
+            offline = server_module.Server("/tmp/not-used.sock", secret, "en")
+            with self.assertRaises(OSError):
+                offline.load()
+        self.assertNotIn(secret, str(info.call_args_list))
+        self.assertIn("cache it", str(info.call_args_list))
+
+    def test_offline_and_no_telemetry_flags_set_before_library_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "import-flags.json"
+            (Path(directory) / "faster_whisper.py").write_text(
+                "import json, os\n"
+                "with open(os.environ['TEST_IMPORT_MARKER'], 'w') as stream:\n"
+                "    json.dump({'offline': os.getenv('HF_HUB_OFFLINE'), "
+                "'telemetry': os.getenv('HF_HUB_DISABLE_TELEMETRY')}, stream)\n"
+                "class WhisperModel: pass\n"
+            )
+            env = dict(os.environ, HERMESKEY_OFFLINE="1", PYTHONPATH=directory, TEST_IMPORT_MARKER=str(marker))
+            env.pop("HF_HUB_OFFLINE", None)
+            env.pop("HF_HUB_DISABLE_TELEMETRY", None)
+            subprocess.run([sys.executable, str(MODULE), "--help"], env=env,
+                           capture_output=True, text=True, timeout=5, check=True)
+            self.assertEqual(json.loads(marker.read_text()), {"offline": "1", "telemetry": "1"})
 
     def test_service_uses_environment_without_private_model_in_argv(self):
         secret = "PRIVATE_SYNTHETIC_MODEL_PATH"

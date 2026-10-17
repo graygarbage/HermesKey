@@ -13,13 +13,13 @@ from typing import Callable
 
 DEFAULTS = {
     "MODEL": "medium", "STT_LANG": "en", "RECORD_SOURCE": "default",
-    "INSERT_MODE": "type", "COPY_TO_CLIPBOARD": "1", "FOCUS_SAFE_MODE": "0",
+    "HERMESKEY_OFFLINE": "0", "INSERT_MODE": "type", "COPY_TO_CLIPBOARD": "1", "FOCUS_SAFE_MODE": "0",
     "OVERLAY_ENABLED": "1", "SOUND_ENABLED": "1",
 }
 SAFE_MODEL = re.compile(r"[A-Za-z0-9._/-]+\Z")
 SAFE_LANGUAGE = re.compile(r"(?:[a-z]{2}|haw|yue)?\Z")
 SAFE_SOURCE = re.compile(r"[A-Za-z0-9_./:@-]+\Z")
-BEHAVIOR_FLAGS = {"COPY_TO_CLIPBOARD", "FOCUS_SAFE_MODE", "OVERLAY_ENABLED", "SOUND_ENABLED"}
+BEHAVIOR_FLAGS = {"HERMESKEY_OFFLINE", "COPY_TO_CLIPBOARD", "FOCUS_SAFE_MODE", "OVERLAY_ENABLED", "SOUND_ENABLED"}
 MANAGED_KEYS = "|".join(DEFAULTS)
 MANAGED = re.compile(rf"^[ \t]*(?:export[ \t]+)?({MANAGED_KEYS})[ \t]*=")
 ASSIGNMENT = re.compile(

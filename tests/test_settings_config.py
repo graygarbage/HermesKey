@@ -42,13 +42,13 @@ class SettingsConfigTests(unittest.TestCase):
 
     def test_behavior_flags_and_insert_mode_are_literals(self):
         doc = ConfigDocument(self.path)
-        doc.save({"INSERT_MODE": "clipboard", "COPY_TO_CLIPBOARD": "0",
+        doc.save({"INSERT_MODE": "clipboard", "COPY_TO_CLIPBOARD": "0", "HERMESKEY_OFFLINE": "1",
                   "OVERLAY_ENABLED": "0", "SOUND_ENABLED": "0", "FOCUS_SAFE_MODE": "1"},
                  lambda candidate: None)
-        for text in ("INSERT_MODE=clipboard", "COPY_TO_CLIPBOARD=0", "OVERLAY_ENABLED=0",
+        for text in ("INSERT_MODE=clipboard", "COPY_TO_CLIPBOARD=0", "HERMESKEY_OFFLINE=1", "OVERLAY_ENABLED=0",
                      "SOUND_ENABLED=0", "FOCUS_SAFE_MODE=1", "PASTE_FOR_APPS=$TERMINAL_APPS"):
             self.assertIn(text, self.path.read_text())
-        for key, value in (("INSERT_MODE", "paste"), ("SOUND_ENABLED", "yes"),
+        for key, value in (("INSERT_MODE", "paste"), ("HERMESKEY_OFFLINE", "yes"), ("SOUND_ENABLED", "yes"),
                            ("FOCUS_SAFE_MODE", "1;rm /tmp/test")):
             with self.subTest(key=key), self.assertRaises(ConfigError):
                 doc.render({key: value})

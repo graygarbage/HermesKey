@@ -128,6 +128,10 @@ class SettingsWindow(QMainWindow):
                 form.addRow(self.language_label, self.language_picker)
                 form.addRow(self.language_custom_label, self.language_edit)
                 form.addRow("", self.language_hint)
+                self.offline_toggle = QCheckBox("Strict offline speech model (cached or local only)")
+                self.offline_toggle.setObjectName("offline_toggle")
+                self.offline_toggle.setToolTip("Stops model metadata requests and downloads on speech-service startup. Cache the model first; restart required.")
+                form.addRow("", self.offline_toggle)
                 self.source_picker = QComboBox()
                 self.source_picker.setObjectName("source_picker")
                 self.source_picker.addItem("System default microphone (follows desktop setting)", "default")
@@ -197,13 +201,14 @@ class SettingsWindow(QMainWindow):
 
         if self.document is None:
             for widget in (self.model_picker, self.model_edit, self.language_picker, self.language_edit,
-                           self.source_picker, self.refresh_button, self.monitor_toggle, self.insert_picker,
+                           self.offline_toggle, self.source_picker, self.refresh_button, self.monitor_toggle, self.insert_picker,
                            self.clipboard_backup, self.focus_safe, self.overlay_toggle, self.sound_toggle):
                 widget.setEnabled(False)
             self.notice.setText(f"Cannot load config: {self.load_error}. Edit it manually or rerun the installer.")
         else:
             self.select_existing(self.model_picker, self.model_edit, self.document.values["MODEL"])
             self.select_existing(self.language_picker, self.language_edit, self.document.values["STT_LANG"])
+            self.offline_toggle.setChecked(self.document.values["HERMESKEY_OFFLINE"] == "1")
             self.insert_picker.setCurrentIndex(self.insert_picker.findData(self.document.values["INSERT_MODE"]))
             self.clipboard_backup.setChecked(self.document.values["COPY_TO_CLIPBOARD"] == "1")
             self.focus_safe.setChecked(self.document.values["FOCUS_SAFE_MODE"] == "1")
@@ -222,6 +227,7 @@ class SettingsWindow(QMainWindow):
         self.insert_picker.currentIndexChanged.connect(self.update_insert_mode)
         self.model_edit.textChanged.connect(self.update_buttons)
         self.language_edit.textChanged.connect(self.update_buttons)
+        self.offline_toggle.toggled.connect(self.update_buttons)
         self.source_picker.currentIndexChanged.connect(self.update_buttons)
         for toggle in (self.clipboard_backup, self.focus_safe, self.overlay_toggle, self.sound_toggle):
             toggle.toggled.connect(self.update_buttons)
@@ -254,6 +260,7 @@ class SettingsWindow(QMainWindow):
         values = self.document.values
         self.select_existing(self.model_picker, self.model_edit, values["MODEL"])
         self.select_existing(self.language_picker, self.language_edit, values["STT_LANG"])
+        self.offline_toggle.setChecked(values["HERMESKEY_OFFLINE"] == "1")
         self.insert_picker.setCurrentIndex(self.insert_picker.findData(values["INSERT_MODE"]))
         for key, toggle in (("COPY_TO_CLIPBOARD", self.clipboard_backup),
                             ("FOCUS_SAFE_MODE", self.focus_safe), ("OVERLAY_ENABLED", self.overlay_toggle),
@@ -407,6 +414,7 @@ class SettingsWindow(QMainWindow):
         proposed = {
             "MODEL": self.model_edit.text() if self.model_picker.currentData() == CUSTOM else self.model_picker.currentData(),
             "STT_LANG": self.language_edit.text() if self.language_picker.currentData() == CUSTOM else self.language_picker.currentData(),
+            "HERMESKEY_OFFLINE": "1" if self.offline_toggle.isChecked() else "0",
             "RECORD_SOURCE": self.source_picker.currentData(),
             "INSERT_MODE": self.insert_picker.currentData(),
             "COPY_TO_CLIPBOARD": "1" if self.clipboard_backup.isChecked() else "0",
@@ -459,19 +467,19 @@ class SettingsWindow(QMainWindow):
         self.update_buttons()
         self.notice.setText(f"Saved {self.path}. Other settings and comments were preserved.")
         # Hotkey behavior and microphone choice are read per invocation.
-        if not ({"MODEL", "STT_LANG"} & changes.keys()):
+        if not ({"MODEL", "STT_LANG", "HERMESKEY_OFFLINE"} & changes.keys()):
             self.notice.setText(self.notice.text() + " Changes take effect on the next hotkey invocation.")
             if close:
                 self.close()
             return True
         if not offer_restart:
-            self.notice.setText(self.notice.text() + " Restart the speech service to apply model/language changes.")
+            self.notice.setText(self.notice.text() + " Restart the speech service to apply speech-model or offline changes.")
             if close:
                 self.close()
             return True
         answer = QMessageBox.question(
             self, "Restart speech service?",
-            "Model or language changes require restarting hermeskey.service. "
+            "Speech model, spoken language or offline mode changes require restarting hermeskey.service. "
             "This can interrupt active dictation. Restart now?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
