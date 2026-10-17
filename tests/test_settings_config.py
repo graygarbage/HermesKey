@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
-from hermeskey_settings_config import ConfigChanged, ConfigDocument, ConfigError
+from hermeskey_settings_config import DEFAULTS, ConfigChanged, ConfigDocument, ConfigError
 
 
 class SettingsConfigTests(unittest.TestCase):
@@ -24,7 +24,7 @@ class SettingsConfigTests(unittest.TestCase):
 
     def test_change_only_requested_keys_preserving_all_else(self):
         doc = ConfigDocument(self.path)
-        self.assertEqual(doc.values, {"MODEL": "medium", "STT_LANG": "en", "RECORD_SOURCE": "default"})
+        self.assertEqual(doc.values, DEFAULTS)
         doc.save({"MODEL": "small.en", "STT_LANG": ""}, lambda candidate: None)
         self.assertEqual(self.path.read_text(), self.text.replace("MODEL='medium'", "MODEL=small.en").replace("STT_LANG=en", "STT_LANG="))
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
@@ -39,6 +39,19 @@ class SettingsConfigTests(unittest.TestCase):
         self.assertIn("MODEL='medium'  # current model", self.path.read_text())
         with self.assertRaises(ConfigError):
             doc.render({"RECORD_SOURCE": "source;touch /tmp/unsafe"})
+
+    def test_behavior_flags_and_insert_mode_are_literals(self):
+        doc = ConfigDocument(self.path)
+        doc.save({"INSERT_MODE": "clipboard", "COPY_TO_CLIPBOARD": "0",
+                  "OVERLAY_ENABLED": "0", "SOUND_ENABLED": "0", "FOCUS_SAFE_MODE": "1"},
+                 lambda candidate: None)
+        for text in ("INSERT_MODE=clipboard", "COPY_TO_CLIPBOARD=0", "OVERLAY_ENABLED=0",
+                     "SOUND_ENABLED=0", "FOCUS_SAFE_MODE=1", "PASTE_FOR_APPS=$TERMINAL_APPS"):
+            self.assertIn(text, self.path.read_text())
+        for key, value in (("INSERT_MODE", "paste"), ("SOUND_ENABLED", "yes"),
+                           ("FOCUS_SAFE_MODE", "1;rm /tmp/test")):
+            with self.subTest(key=key), self.assertRaises(ConfigError):
+                doc.render({key: value})
 
     def test_validator_failure_leaves_file_unchanged(self):
         def reject(_candidate):

@@ -137,7 +137,7 @@ The installer also adds local desktop launchers for:
 - HermesKey Doctor
 - HermesKey Logs
 - HermesKey Config
-- HermesKey Settings (preview; choose microphone, model and language)
+- HermesKey Settings (preview; choose microphone, model, language, and common behavior)
 
 For actual dictation, keep binding your hotkey to:
 

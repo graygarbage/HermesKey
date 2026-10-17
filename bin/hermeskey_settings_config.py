@@ -11,13 +11,19 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
-DEFAULTS = {"MODEL": "medium", "STT_LANG": "en", "RECORD_SOURCE": "default"}
+DEFAULTS = {
+    "MODEL": "medium", "STT_LANG": "en", "RECORD_SOURCE": "default",
+    "INSERT_MODE": "type", "COPY_TO_CLIPBOARD": "1", "FOCUS_SAFE_MODE": "0",
+    "OVERLAY_ENABLED": "1", "SOUND_ENABLED": "1",
+}
 SAFE_MODEL = re.compile(r"[A-Za-z0-9._/-]+\Z")
 SAFE_LANGUAGE = re.compile(r"(?:[a-z]{2}|haw|yue)?\Z")
 SAFE_SOURCE = re.compile(r"[A-Za-z0-9_./:@-]+\Z")
-MANAGED = re.compile(r"^[ \t]*(?:export[ \t]+)?(MODEL|STT_LANG|RECORD_SOURCE)[ \t]*=")
+BEHAVIOR_FLAGS = {"COPY_TO_CLIPBOARD", "FOCUS_SAFE_MODE", "OVERLAY_ENABLED", "SOUND_ENABLED"}
+MANAGED_KEYS = "|".join(DEFAULTS)
+MANAGED = re.compile(rf"^[ \t]*(?:export[ \t]+)?({MANAGED_KEYS})[ \t]*=")
 ASSIGNMENT = re.compile(
-    r"^(?P<prefix>[ \t]*(?P<key>MODEL|STT_LANG|RECORD_SOURCE)=)"
+    rf"^(?P<prefix>[ \t]*(?P<key>{MANAGED_KEYS})=)"
     r"(?P<value>[A-Za-z0-9_./:@-]*|\"[A-Za-z0-9_./:@-]*\"|'[A-Za-z0-9_./:@-]*')"
     r"(?P<suffix>[ \t]*(?:\#.*)?)$"
 )
@@ -52,7 +58,12 @@ def parse_lines(text: str) -> tuple[list[str], dict[str, str], dict[str, int]]:
         if assignment is None:
             raise ConfigError(f"Unsupported {key} assignment on line {index + 1}; edit it manually")
         raw = assignment.group("value")
-        values[key] = raw[1:-1] if raw.startswith(("'", '"')) else raw
+        value = raw[1:-1] if raw.startswith(("'", '"')) else raw
+        if (key == "INSERT_MODE" and value not in {"type", "clipboard"}) or (
+            key in BEHAVIOR_FLAGS and value not in {"0", "1"}
+        ):
+            raise ConfigError(f"Unsupported {key} value on line {index + 1}; edit it manually")
+        values[key] = value
         positions[key] = index
     return lines, values, positions
 
@@ -73,8 +84,12 @@ class ConfigDocument:
         for key, value in edits.items():
             if key not in DEFAULTS:
                 raise ConfigError(f"Unsupported GUI key: {key}")
-            pattern = {"MODEL": SAFE_MODEL, "STT_LANG": SAFE_LANGUAGE, "RECORD_SOURCE": SAFE_SOURCE}[key]
-            if not isinstance(value, str) or not pattern.fullmatch(value):
+            pattern = {"MODEL": SAFE_MODEL, "STT_LANG": SAFE_LANGUAGE, "RECORD_SOURCE": SAFE_SOURCE}.get(key)
+            allowed = (
+                bool(pattern.fullmatch(value)) if pattern else
+                value in ({"type", "clipboard"} if key == "INSERT_MODE" else {"0", "1"})
+            ) if isinstance(value, str) else False
+            if not allowed:
                 raise ConfigError(f"Invalid {key}; use a simple literal without spaces, quotes or shell syntax")
         lines, _, positions = parse_lines(self.original.decode("utf-8"))
         for key, value in edits.items():
