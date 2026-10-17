@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from hermeskey_audio_sources import SourceDiscoveryError, parse_json_sources, parse_short_sources
 from hermeskey_settings_config import ConfigDocument, ConfigError, canonical_path
+from hermeskey_system_panel import SystemPanel
 
 CUSTOM = "custom:"  # not a valid literal model ID or language code
 MODEL_PRESETS = (
@@ -46,7 +47,7 @@ SECTIONS = (
     ("Speech", "Choose the input, model and spoken language. Selecting a model does not download it."),
     ("Input", "Control typing, clipboard backup and focus safety."),
     ("Appearance", "Toggle the overlay and audio cues."),
-    ("System", "Service status and diagnostic actions will appear here."),
+    ("System", "Check service readiness, restart user services, and review local diagnostics."),
 )
 
 
@@ -157,9 +158,14 @@ class SettingsWindow(QMainWindow):
                 self.sound_toggle.setObjectName("sound_toggle")
                 page_layout.addWidget(self.overlay_toggle)
                 page_layout.addWidget(self.sound_toggle)
+            elif name == "System":
+                self.system_panel = SystemPanel(page)
+                self.system_panel.restartRequested.connect(self.request_service_restart)
+                page_layout.addWidget(self.system_panel)
             page_layout.addStretch()
             self.pages.addWidget(page)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.navigation.currentRowChanged.connect(self.system_page_changed)
         self.navigation.setCurrentRow(0)
         content.addWidget(self.navigation)
         content.addWidget(self.pages, 1)
@@ -214,6 +220,51 @@ class SettingsWindow(QMainWindow):
         self.update_language_control()
         self.update_insert_mode()
         self.update_buttons()
+
+    def system_page_changed(self, row: int) -> None:
+        if row == 3:
+            self.system_panel.activate()
+        else:
+            self.system_panel.deactivate()
+
+    def revert_unsaved(self) -> None:
+        if self.document is None:
+            return
+        values = self.document.values
+        self.select_existing(self.model_picker, self.model_edit, values["MODEL"])
+        self.select_existing(self.language_picker, self.language_edit, values["STT_LANG"])
+        self.insert_picker.setCurrentIndex(self.insert_picker.findData(values["INSERT_MODE"]))
+        for key, toggle in (("COPY_TO_CLIPBOARD", self.clipboard_backup),
+                            ("FOCUS_SAFE_MODE", self.focus_safe), ("OVERLAY_ENABLED", self.overlay_toggle),
+                            ("SOUND_ENABLED", self.sound_toggle)):
+            toggle.setChecked(values[key] == "1")
+        self._source_initialized = False
+        self.populate_sources()
+        self.update_insert_mode()
+        self.update_buttons()
+
+    def request_service_restart(self, units) -> None:
+        if self.changes():
+            answer = QMessageBox.question(
+                self, "Unsaved settings", "Save pending settings before restarting? Choose No to discard them, or Cancel to keep editing.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer == QMessageBox.StandardButton.Cancel:
+                return
+            if answer == QMessageBox.StandardButton.Yes:
+                if not self.save_changes(offer_restart=False):
+                    return
+            else:
+                self.revert_unsaved()
+        answer = QMessageBox.question(
+            self, "Restart user service?",
+            "Restarting can interrupt active recording, transcription, or typing. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.system_panel.restart_units(units)
 
     def refresh_sources(self) -> None:
         if self.source_process is not None or self.document is None:
@@ -375,7 +426,7 @@ class SettingsWindow(QMainWindow):
         finally:
             check_path.unlink(missing_ok=True)
 
-    def save_changes(self, close: bool = False) -> bool:
+    def save_changes(self, close: bool = False, offer_restart: bool = True) -> bool:
         if self.document is None or not self.changes():
             return False
         changes = self.changes()
@@ -389,6 +440,11 @@ class SettingsWindow(QMainWindow):
         # Hotkey behavior and microphone choice are read per invocation.
         if not ({"MODEL", "STT_LANG"} & changes.keys()):
             self.notice.setText(self.notice.text() + " Changes take effect on the next hotkey invocation.")
+            if close:
+                self.close()
+            return True
+        if not offer_restart:
+            self.notice.setText(self.notice.text() + " Restart the speech service to apply model/language changes.")
             if close:
                 self.close()
             return True
@@ -425,6 +481,7 @@ class SettingsWindow(QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
+        self.system_panel.stop()
         process = self.source_process
         self.source_process = None  # callbacks must not start fallback while closing
         if process is not None and process.state() != QProcess.ProcessState.NotRunning:
