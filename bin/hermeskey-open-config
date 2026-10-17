@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/hermeskey/hermeskey.env"
-
-mkdir -p "$(dirname "$CONFIG_PATH")"
-touch "$CONFIG_PATH"
+CONFIG_DIR="$(dirname -- "$CONFIG_PATH")"
+if [[ -L "$CONFIG_DIR" || -L "$CONFIG_PATH" ]]; then
+  printf 'Refusing symlinked HermesKey config path; inspect it manually.\n' >&2
+  exit 1
+fi
+mkdir -p "$CONFIG_DIR"
+[[ -d "$CONFIG_DIR" && ! -L "$CONFIG_DIR" ]] || { printf 'Invalid HermesKey config directory.\n' >&2; exit 1; }
+chmod 0700 "$CONFIG_DIR"
+if [[ ! -e "$CONFIG_PATH" ]]; then
+  : >"$CONFIG_PATH"
+fi
+[[ -f "$CONFIG_PATH" && ! -L "$CONFIG_PATH" ]] || { printf 'Invalid HermesKey config file.\n' >&2; exit 1; }
+chmod 0600 "$CONFIG_PATH"
 
 if command -v xdg-open >/dev/null 2>&1; then
   exec xdg-open "$CONFIG_PATH"

@@ -36,7 +36,21 @@ warn_if_missing notify-send
 warn_if_missing ydotool
 warn_if_missing paplay
 
-mkdir -p "$BIN_DEST" "$SYSTEMD_DEST" "$APPLICATIONS_DEST" "$METADATA_DEST" "$CONFIG_DEST_DIR" "$DATA_DEST_DIR" "$ICON_DEST"
+# A config file may later hold private model paths or credentials. Do not
+# follow links to an unrelated config directory/file or briefly create a
+# world-readable copy, even on first install with a permissive umask.
+if [[ -L "$CONFIG_DEST_DIR" || -L "$CONFIG_DEST" ]]; then
+  printf 'Refusing symlinked HermesKey config path; inspect %s before installing.\n' "$CONFIG_DEST_DIR" >&2
+  exit 1
+fi
+mkdir -p "$CONFIG_DEST_DIR"
+[[ -d "$CONFIG_DEST_DIR" && ! -L "$CONFIG_DEST_DIR" ]] || { printf 'Invalid HermesKey config directory.\n' >&2; exit 1; }
+chmod 0700 "$CONFIG_DEST_DIR"
+if [[ -e "$CONFIG_DEST" ]]; then
+  [[ -f "$CONFIG_DEST" ]] || { printf 'Invalid HermesKey config file.\n' >&2; exit 1; }
+  chmod 0600 "$CONFIG_DEST"
+fi
+mkdir -p "$BIN_DEST" "$SYSTEMD_DEST" "$APPLICATIONS_DEST" "$METADATA_DEST" "$DATA_DEST_DIR" "$ICON_DEST"
 
 install -m 0755 "$ROOT/bin/hermeskey" "$BIN_DEST/hermeskey"
 install -m 0755 "$ROOT/bin/hermeskey-server.py" "$BIN_DEST/hermeskey-server.py"
@@ -72,7 +86,7 @@ sed "s|@BIN_DEST@|$BIN_DEST|g" "$ROOT/desktop/hermeskey-control-center.desktop.i
 sed "s|@BIN_DEST@|$BIN_DEST|g" "$ROOT/desktop/hermeskey-settings.desktop.in" > "$APPLICATIONS_DEST/hermeskey-settings.desktop"
 
 if [[ ! -f "$CONFIG_DEST" ]]; then
-  install -m 0644 "$ROOT/config/hermeskey.env.example" "$CONFIG_DEST"
+  install -m 0600 "$ROOT/config/hermeskey.env.example" "$CONFIG_DEST"
 fi
 
 # Record a non-default venv location so the service, doctor, and hotkey
