@@ -6,6 +6,19 @@ All notable changes to HermesKey will be documented in this file.
 
 - TBD
 
+## [0.6.1] - 2026-10-17
+
+Privacy-focused maintenance release for local dictation and support diagnostics.
+
+### Security
+
+- dictated text and active-window metadata are passed to typing and matching helpers over standard input rather than process arguments; custom model IDs/paths are no longer placed in the long-lived speech-server command line. An older `ydotool` without safe stdin support now refuses direct typing rather than exposing private text
+- Doctor no longer includes raw service journal/status snippets, local paths or audio-device lists; the speech server forwards only its own sanitized events through Python logging, not third-party model/network INFO messages
+
+### Added
+
+- a GitHub repository social-preview image and editable source, for optional manual upload in repository settings
+
 ## [0.6.0] - 2026-10-17
 
 Settings GUI release: one window for day-to-day configuration and local support tools.
