@@ -219,6 +219,38 @@ class SettingsShellTests(unittest.TestCase):
             self.assertTrue(window.offline_toggle.isChecked())
             window.close()
 
+    def test_privacy_first_typing_explicitly_disables_new_backups(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\nINSERT_MODE=clipboard\nCOPY_TO_CLIPBOARD=1\n")
+            window = self.window(config)
+            window.resize(680, 420)
+            window.show()
+            window.navigation.setCurrentRow(1)
+            self.app.processEvents()
+            self.assertTrue(window.privacy_button.isVisible())
+            self.assertIn("KDE clipboard history", window.clipboard_hint.text())
+            self.assertTrue(window.privacy_button.isEnabled())
+            self.assertFalse(window.clipboard_backup.isEnabled())
+            window.privacy_button.click()
+            self.assertEqual(window.insert_picker.currentData(), "type")
+            self.assertFalse(window.clipboard_backup.isChecked())
+            self.assertTrue(window.clipboard_backup.isEnabled())
+            self.assertIn("existing clipboard history is unchanged", window.notice.text())
+            self.app.processEvents()
+            hint_bottom = window.clipboard_hint.mapTo(window, window.clipboard_hint.rect().bottomLeft()).y()
+            notice_top = window.notice.mapTo(window, window.notice.rect().topLeft()).y()
+            self.assertLess(hint_bottom, notice_top)
+            with patch.object(window, "validate"), patch("subprocess.run") as run, \
+                 patch.object(QMessageBox, "question") as question:
+                self.assertTrue(window.save_changes())
+            run.assert_not_called()
+            question.assert_not_called()
+            self.assertIn("INSERT_MODE=type", config.read_text())
+            self.assertIn("COPY_TO_CLIPBOARD=0", config.read_text())
+            self.assertFalse(window.privacy_button.isEnabled())
+            window.close()
+
     def test_behavior_only_save_does_not_restart_or_change_clipboard_backup(self):
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "hermeskey.env"
