@@ -1,9 +1,10 @@
 """Validate startup polling and transcript checks without a live model."""
 import importlib.util
 import io
+import os
 import tempfile
-from contextlib import redirect_stdout
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -61,6 +62,18 @@ class VerifyInstallTests(unittest.TestCase):
              ]), redirect_stdout(stdout), self.assertRaises(RuntimeError) as result:
             verify_install.verify("/tmp/example.sock", self.sample, 60, 15)
         self.assertNotIn(marker, stdout.getvalue() + str(result.exception))
+
+    @patch.object(verify_install.time, "sleep")
+    @patch.object(verify_install.time, "monotonic", side_effect=[0, 0, 15, 16, 20])
+    @patch.object(verify_install, "request", side_effect=FileNotFoundError())
+    def test_offline_wait_never_promises_download(self, _request, _clock, _sleep):
+        output = io.StringIO()
+        with patch.dict(os.environ, {"HERMESKEY_OFFLINE": "1"}), redirect_stdout(output), \
+             self.assertRaisesRegex(RuntimeError, "offline model not ready"):
+            verify_install.verify("/tmp/example.sock", self.sample, 20, 15)
+        self.assertIn("cache it first", output.getvalue())
+        self.assertNotIn("download", output.getvalue().lower())
+        self.assertNotIn("Hugging Face", output.getvalue())
 
     @patch.object(verify_install.time, "sleep")
     @patch.object(verify_install.time, "monotonic", side_effect=[0, 0, 0, 10, 11])
