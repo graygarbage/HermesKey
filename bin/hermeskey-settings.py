@@ -116,10 +116,18 @@ class SettingsWindow(QMainWindow):
                 self.language_edit.setObjectName("language_edit")
                 self.language_edit.setPlaceholderText("Whisper language code, e.g. nl")
                 self.language_custom_label = QLabel("Other code:")
+                self.language_label = QLabel("Spoken language:")
+                self.language_label.setBuddy(self.language_picker)
+                self.language_hint = QLabel(
+                    "Choose the language you speak (or Auto-detect). "
+                    "HermesKey transcribes speech; it does not translate into the selected language."
+                )
+                self.language_hint.setWordWrap(True)
                 form.addRow("Model:", self.model_picker)
                 form.addRow(self.model_custom_label, self.model_edit)
-                form.addRow("Language:", self.language_picker)
+                form.addRow(self.language_label, self.language_picker)
                 form.addRow(self.language_custom_label, self.language_edit)
+                form.addRow("", self.language_hint)
                 self.source_picker = QComboBox()
                 self.source_picker.setObjectName("source_picker")
                 self.source_picker.addItem("System default microphone (follows desktop setting)", "default")
