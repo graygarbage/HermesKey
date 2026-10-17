@@ -50,13 +50,14 @@ def verify(socket_path: str, sample: Path, model_timeout: int, smoke_timeout: in
     print("Speech model ready. Running synthetic-audio transcription smoke test...", flush=True)
     reply = request(socket_path, {"cmd": "transcribe", "wav": str(sample), "language": "en"}, smoke_timeout)
     if reply.get("status") != "ok":
-        raise RuntimeError(f"transcription failed: {reply.get('error', reply)}")
+        # Third-party error details may contain sample paths or private text.
+        raise RuntimeError("transcription failed; check local service diagnostics")
     text = reply.get("text", "")
     # The synthesized clip says "This is a test of Hermes Key speech recognition."
     # Whisper may spell the product name differently, but should get these words.
     if not all(re.search(rf"\b{word}\b", text, re.IGNORECASE) for word in ("test", "speech")):
-        raise RuntimeError(f"smoke transcript did not contain expected words: {text!r}")
-    print(f"Speech smoke test passed. Transcript: {text!r}", flush=True)
+        raise RuntimeError("smoke transcript did not contain expected words")
+    print("Speech smoke test passed.", flush=True)
 
     if subprocess.run(["systemctl", "--user", "is-active", "--quiet", "hermeskey-ydotoold.service"]).returncode:
         raise RuntimeError("ydotoold user service is not active (speech test passed, but typing may fail)")
@@ -71,11 +72,13 @@ def main() -> int:
     parser.add_argument("--smoke-timeout", type=int, default=180)
     args = parser.parse_args()
     if not args.sample.is_file():
-        parser.error(f"smoke sample missing: {args.sample}")
+        parser.error("smoke sample missing")
     try:
         verify(args.socket, args.sample.resolve(), args.model_timeout, args.smoke_timeout)
     except (RuntimeError, OSError, ValueError) as exc:
-        print(f"Install validation failed: {exc}", file=sys.stderr)
+        # Only our own RuntimeErrors contain known, non-content messages.
+        reason = str(exc) if type(exc) is RuntimeError else type(exc).__name__
+        print(f"Install validation failed: {reason}", file=sys.stderr)
         print("Inspect: journalctl --user -u hermeskey.service -n 80 --no-pager", file=sys.stderr)
         return 1
     return 0
