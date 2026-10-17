@@ -6,6 +6,16 @@ All notable changes to HermesKey will be documented in this file.
 
 - TBD
 
+## [0.6.3] - 2026-10-17
+
+Privacy and runtime-state security maintenance release.
+
+### Security
+
+- recordings, PID/overlay state and speech sockets no longer use predictable shared `/tmp` paths when `XDG_RUNTIME_DIR` is absent. Runtime paths must be directly inside a private user-owned directory; unsafe files and symlinks are refused before recording, and stale recorder/overlay PIDs are checked against process start time before signaling
+- fresh installs create the config directory as `0700` and user config as `0600`; upgrades tighten older permissions without replacing config values. The config opener also creates or tightens these modes and refuses symlinked config paths
+- install verification no longer prints the transcription of a custom sample, including on failure; untrusted error messages and private sample paths are omitted from diagnostics
+
 ## [0.6.2] - 2026-10-17
 
 Security maintenance release for Wayland typing socket trust.
