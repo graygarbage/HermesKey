@@ -11,8 +11,16 @@ import sys
 from faster_whisper import WhisperModel
 
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+# Do not forward third-party HTTP/model logs to the user journal. Even INFO
+# records may contain request URLs or private model/audio metadata. Only our
+# allowlisted, sanitized diagnostics reach the service's stderr.
+logging.basicConfig(level=logging.CRITICAL + 1, handlers=[logging.NullHandler()], force=True)
 logger = logging.getLogger("hermeskey.server")
+logger.setLevel(logging.INFO)
+logger.propagate = False
+safe_handler = logging.StreamHandler()
+safe_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+logger.addHandler(safe_handler)
 
 
 def log(msg: str) -> None:

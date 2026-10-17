@@ -8,7 +8,7 @@ section() { printf '\n%s\n' "== $* =="; }
 check_cmd() {
   local cmd="$1"
   if command -v "$cmd" >/dev/null 2>&1; then
-    ok "$cmd found: $(command -v "$cmd")"
+    ok "$cmd found"
   else
     fail "$cmd not found"
   fi
@@ -19,8 +19,8 @@ CONFIG_ERRORS=0
 if [[ -f "$CONFIG_FILE" ]]; then
   # HermesKey itself sources this user-owned shell configuration.
   # shellcheck disable=SC1090
-  if ! source "$CONFIG_FILE"; then
-    fail "Could not load config: $CONFIG_FILE"
+  if ! source "$CONFIG_FILE" >/dev/null 2>&1; then
+    fail "Could not load config; check your private config file"
     CONFIG_ERRORS=1
   fi
 fi
@@ -37,25 +37,28 @@ validate_choice() {
   if [[ " $choices " == *" $value "* ]]; then
     ok "$name=$value"
   else
-    config_error "$name=$value is invalid (choose: ${choices// /, })"
+    config_error "$name is invalid (choose: ${choices// /, })"
   fi
 }
 
 validate_config() {
   section 'Configuration'
-  printf 'File: %s\n' "$CONFIG_FILE"
-  [[ -f "$CONFIG_FILE" ]] || warn 'Config file missing; using defaults'
+  if [[ -f "$CONFIG_FILE" ]]; then
+    ok 'Config file present'
+  else
+    warn 'Config file missing; using defaults'
+  fi
 
   local model="${MODEL:-medium}" language="${STT_LANG-en}" lang_result
   case "$model" in
     tiny|tiny.en|base|base.en|small|small.en|medium|medium.en|large|large-v1|large-v2|large-v3|large-v3-turbo|turbo|distil-large-v2|distil-large-v3|distil-medium.en|distil-small.en)
-      ok "MODEL=$model"
+      ok 'MODEL preset supported'
       ;;
     *)
       if [[ -d "$model" || "$model" == */* ]]; then
-        warn "MODEL=$model is a custom path or Hugging Face ID; cannot verify it offline"
+        warn 'MODEL is a custom path or Hugging Face ID; cannot verify it offline'
       else
-        warn "Unknown faster-whisper model alias: $model (verify spelling or use a local path / Hugging Face ID)"
+        warn 'Unknown faster-whisper model alias (verify spelling or use a local path / Hugging Face ID)'
       fi
       ;;
   esac
@@ -63,7 +66,7 @@ validate_config() {
   if [[ -z "$language" ]]; then
     ok 'STT_LANG= (automatic detection)'
   elif [[ ! "$language" =~ ^([a-z]{2}|haw|yue)$ ]]; then
-    config_error "Invalid STT_LANG=$language (expected a Whisper language code or empty for auto-detect)"
+    config_error 'Invalid STT_LANG (expected a Whisper language code or empty for auto-detect)'
   else
     # Use faster-whisper's actual supported codes when the configured venv is
     # present. haw and yue are valid three-letter exceptions to ISO-639-1.
@@ -74,9 +77,9 @@ print('valid' if sys.argv[1] in _LANGUAGE_CODES else 'invalid')
 PY
 )" || lang_result=unavailable
     case "$lang_result" in
-      valid) ok "STT_LANG=$language" ;;
-      invalid) config_error "Unsupported STT_LANG=$language (not in faster-whisper's language codes)" ;;
-      *) warn "STT_LANG=$language has valid syntax, but could not be checked against faster-whisper (check PYTHON_STT)" ;;
+      valid) ok 'STT_LANG supported' ;;
+      invalid) config_error "Unsupported STT_LANG (not in faster-whisper's language codes)" ;;
+      *) warn 'STT_LANG has valid syntax, but could not be checked against faster-whisper (check PYTHON_STT)' ;;
     esac
   fi
 
@@ -103,7 +106,7 @@ PY
     if [[ "$value" =~ ^[0-9]+$ ]]; then
       ok "$name=$value"
     else
-      config_error "$name=$value is invalid (expected a non-negative integer in milliseconds)"
+      config_error "$name is invalid (expected a non-negative integer in milliseconds)"
     fi
   done
   for name in START_TONE_HZ STOP_TONE_HZ TONE_DURATION TONE_VOLUME; do
@@ -116,7 +119,7 @@ PY
     if [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
       ok "$name=$value"
     else
-      config_error "$name=$value is invalid (expected a non-negative number)"
+      config_error "$name is invalid (expected a non-negative number)"
     fi
   done
 }
@@ -130,7 +133,11 @@ esac
 section 'Environment'
 printf 'XDG_SESSION_TYPE=%s\n' "${XDG_SESSION_TYPE:-}"
 printf 'XDG_CURRENT_DESKTOP=%s\n' "${XDG_CURRENT_DESKTOP:-}"
-printf 'XDG_RUNTIME_DIR=%s\n' "${XDG_RUNTIME_DIR:-}"
+if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+  ok 'XDG_RUNTIME_DIR set'
+else
+  warn 'XDG_RUNTIME_DIR unset (shared /tmp fallback may be unsafe)'
+fi
 
 validate_config
 
@@ -141,14 +148,14 @@ done
 
 section 'Python venv'
 if [[ -x "$PYTHON_STT" ]]; then
-  ok "venv python found: $PYTHON_STT"
+  ok 'configured speech Python found'
   if "$PYTHON_STT" -c 'import faster_whisper' >/dev/null 2>&1; then
     ok 'faster-whisper is installed in the venv'
   else
-    fail "faster-whisper is not installed for $PYTHON_STT"
+    fail 'faster-whisper is not installed for configured speech Python'
   fi
 else
-  warn "venv python missing: $PYTHON_STT"
+  warn 'configured speech Python missing (check PYTHON_STT in your private config)'
 fi
 
 section 'Overlay'
@@ -164,7 +171,7 @@ section 'Active window detection'
 if ! command -v qdbus >/dev/null 2>&1 && ! command -v qdbus6 >/dev/null 2>&1 && ! command -v qdbus-qt6 >/dev/null 2>&1; then
   warn 'qdbus not found: active window detection unavailable (text is always typed)'
 elif command -v kdotool >/dev/null 2>&1; then
-  ok "using kdotool: $(command -v kdotool)"
+  ok 'using kdotool'
 elif python3 -c 'import dbus; from gi.repository import GLib' >/dev/null 2>&1; then
   ok 'using built-in KWin script (python3-dbus + GLib)'
 else
@@ -195,32 +202,34 @@ fi
 
 section 'Sockets'
 if [[ -S "${XDG_RUNTIME_DIR:-/run/user/$UID}/hermeskey.sock" ]]; then
-  ok "HermesKey socket present: ${XDG_RUNTIME_DIR:-/run/user/$UID}/hermeskey.sock"
+  ok 'HermesKey socket present'
 else
-  warn "HermesKey socket missing: ${XDG_RUNTIME_DIR:-/run/user/$UID}/hermeskey.sock"
+  warn 'HermesKey socket missing'
 fi
 
 if [[ -S "/run/user/$UID/.ydotool_socket" ]]; then
-  ok "ydotool socket present: /run/user/$UID/.ydotool_socket"
+  ok 'ydotool socket present'
 else
-  warn 'ydotool socket missing: /run/user/'"$UID"'/.ydotool_socket'
+  warn 'ydotool socket missing'
 fi
 
 section 'Audio sources'
 if command -v pactl >/dev/null 2>&1; then
   if [[ "$RECORD_SOURCE" == "default" ]]; then
-    ok "RECORD_SOURCE=default (currently: $(pactl get-default-source 2>/dev/null || echo unknown))"
+    if pactl get-default-source >/dev/null 2>&1; then
+      ok 'RECORD_SOURCE=default (desktop microphone selected)'
+    else
+      warn 'Could not determine the desktop default microphone'
+    fi
   elif pactl list short sources 2>/dev/null | cut -f2 | grep -qxF -- "$RECORD_SOURCE"; then
-    ok "RECORD_SOURCE found: $RECORD_SOURCE"
+    ok 'Configured RECORD_SOURCE found'
   else
-    warn "RECORD_SOURCE not found: $RECORD_SOURCE (PipeWire may silently fall back to the default mic)"
+    warn 'Configured RECORD_SOURCE not found (PipeWire may fall back to the default mic)'
   fi
-  pactl list short sources || true
 fi
 
-section 'Service snippets'
-systemctl --user --no-pager --full status hermeskey.service 2>/dev/null | sed -n '1,20p' || true
-systemctl --user --no-pager --full status hermeskey-ydotoold.service 2>/dev/null | sed -n '1,20p' || true
+# `systemctl status` embeds arbitrary third-party journal lines (including
+# request URLs). Doctor never includes raw service logs or command lines.
 
 section 'Result'
 if (( CONFIG_ERRORS )); then
@@ -228,5 +237,5 @@ if (( CONFIG_ERRORS )); then
 else
   ok 'Doctor run complete.'
 fi
-printf 'If dictation still fails, include this output plus %s in your issue.\n' "${XDG_STATE_HOME:-$HOME/.local/state}/hermeskey/hermeskey.log"
+printf 'Review this report before sharing. Raw logs, config values, audio and transcripts are not part of Doctor; inspect logs locally and redact before sharing.\n'
 exit "$CONFIG_ERRORS"
