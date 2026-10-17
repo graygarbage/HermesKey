@@ -188,6 +188,30 @@ class SettingsShellTests(unittest.TestCase):
             self.assertIn("STT_LANG=\n", config.read_text())
             window.close()
 
+    def test_offline_speech_toggle_saves_only_with_restart_consent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "hermeskey.env"
+            config.write_text("MODEL=medium\nSTT_LANG=en\n")
+            window = self.window(config)
+            window.show()
+            self.app.processEvents()
+            self.assertTrue(window.offline_toggle.isVisible())
+            self.assertFalse(window.offline_toggle.isChecked())
+            window.offline_toggle.setChecked(True)
+            with patch.object(window, "validate"), \
+                 patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as question, \
+                 patch("subprocess.run") as run:
+                self.assertTrue(window.save_changes())
+            question.assert_called_once()
+            run.assert_not_called()
+            self.assertIn("HERMESKEY_OFFLINE=1\n", config.read_text())
+            self.assertTrue(window.offline_toggle.isChecked())
+            self.assertIn("Restart", window.notice.text())
+            window.offline_toggle.setChecked(False)
+            window.revert_unsaved()
+            self.assertTrue(window.offline_toggle.isChecked())
+            window.close()
+
     def test_behavior_only_save_does_not_restart_or_change_clipboard_backup(self):
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "hermeskey.env"

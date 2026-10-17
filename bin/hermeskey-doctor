@@ -24,6 +24,11 @@ if [[ -f "$CONFIG_FILE" ]]; then
     CONFIG_ERRORS=1
   fi
 fi
+# Diagnostic imports must honor the same local-only policy as the speech service.
+export HF_HUB_DISABLE_TELEMETRY=1
+if [[ "${HERMESKEY_OFFLINE:-0}" == "1" ]]; then
+  export HF_HUB_OFFLINE=1
+fi
 PYTHON_STT="${PYTHON_STT:-$HOME/venvs/stt/bin/python}"
 RECORD_SOURCE="${RECORD_SOURCE:-default}"
 
@@ -87,12 +92,12 @@ PY
   validate_choice TYPE_BACKEND "${TYPE_BACKEND:-auto}" 'auto ydotool wtype xdotool'
   validate_choice PASTE_SHORTCUT "${PASTE_SHORTCUT:-auto}" 'auto ctrl-v ctrl-shift-v shift-insert'
   local name value
-  for name in COPY_TO_CLIPBOARD KEEP_AUDIO OVERLAY_ENABLED SOUND_ENABLED FOCUS_SAFE_MODE; do
+  for name in HERMESKEY_OFFLINE COPY_TO_CLIPBOARD KEEP_AUDIO OVERLAY_ENABLED SOUND_ENABLED FOCUS_SAFE_MODE; do
     value="${!name:-}"
-    # All these settings default to 1 except KEEP_AUDIO and FOCUS_SAFE_MODE.
+    # Offline mode, audio retention and focus safety default to 0.
     if [[ -z "$value" ]]; then
       case "$name" in
-        KEEP_AUDIO|FOCUS_SAFE_MODE) value=0 ;;
+        HERMESKEY_OFFLINE|KEEP_AUDIO|FOCUS_SAFE_MODE) value=0 ;;
         *) value=1 ;;
       esac
     fi

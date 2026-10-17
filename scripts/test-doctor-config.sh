@@ -9,6 +9,7 @@ cp config/hermeskey.env.example "$HERMESKEY_CONFIG"
 
 bash bin/hermeskey-doctor --config-only >"$tmp/output"
 grep -q 'MODEL preset supported' "$tmp/output"
+grep -q 'HERMESKEY_OFFLINE=0' "$tmp/output"
 
 printf '\nMODEL=invalid-model-name\nSTT_LANG=\n' >>"$HERMESKEY_CONFIG"
 bash bin/hermeskey-doctor --config-only >"$tmp/output"
@@ -19,12 +20,12 @@ printf '\nMODEL=org/custom-model\nSTT_LANG=haw\n' >>"$HERMESKEY_CONFIG"
 bash bin/hermeskey-doctor --config-only >"$tmp/output"
 grep -q 'custom path or Hugging Face ID' "$tmp/output"
 
-printf '\nSTT_LANG=xyz\nINSERT_MODE=broken\nTYPE_BACKEND=broken\nCOPY_TO_CLIPBOARD=maybe\nTYPE_KEY_HOLD=fast\nTONE_VOLUME=loud\n' >>"$HERMESKEY_CONFIG"
+printf '\nSTT_LANG=xyz\nHERMESKEY_OFFLINE=maybe\nINSERT_MODE=broken\nTYPE_BACKEND=broken\nCOPY_TO_CLIPBOARD=maybe\nTYPE_KEY_HOLD=fast\nTONE_VOLUME=loud\n' >>"$HERMESKEY_CONFIG"
 if bash bin/hermeskey-doctor --config-only >"$tmp/output"; then
   echo 'Expected invalid configuration to fail' >&2
   exit 1
 fi
-for expected in 'Invalid STT_LANG' 'INSERT_MODE is invalid' 'TYPE_BACKEND is invalid' \
+for expected in 'Invalid STT_LANG' 'HERMESKEY_OFFLINE is invalid' 'INSERT_MODE is invalid' 'TYPE_BACKEND is invalid' \
   'COPY_TO_CLIPBOARD is invalid' 'TYPE_KEY_HOLD is invalid' 'TONE_VOLUME is invalid'; do
   grep -q "$expected" "$tmp/output"
 done

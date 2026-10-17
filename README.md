@@ -105,6 +105,7 @@ Detailed documentation lives here:
 - [docs/HOTKEYS.md](docs/HOTKEYS.md)
 - [docs/DESKTOP-INTEGRATION.md](docs/DESKTOP-INTEGRATION.md)
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
+- [docs/PRIVACY.md](docs/PRIVACY.md) — network/data flows and strict offline speech mode
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/PACKAGING.md](docs/PACKAGING.md)

@@ -9,6 +9,14 @@ import socket
 import stat
 import sys
 
+# huggingface_hub reads offline/telemetry settings during import. Set them
+# before loading faster-whisper; no dictated audio or transcript is sent there.
+os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+if os.environ.get("HERMESKEY_OFFLINE", "0") not in ("0", "1"):
+    raise SystemExit("Invalid HERMESKEY_OFFLINE flag; use 0 or 1")
+if os.environ.get("HERMESKEY_OFFLINE", "0") == "1":
+    os.environ["HF_HUB_OFFLINE"] = "1"
+
 from faster_whisper import WhisperModel
 
 
@@ -66,6 +74,7 @@ class Server:
         self.socket_path = socket_path
         self.model_name = model_name
         self.language = language
+        self.offline = os.environ.get("HERMESKEY_OFFLINE", "0") == "1"
         self.model = None
         self._sock = None
         self._bound_socket = False
@@ -74,7 +83,13 @@ class Server:
     def load(self) -> None:
         # Custom model IDs and paths may contain private names.
         log("loading speech model")
-        self.model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
+        try:
+            self.model = WhisperModel(self.model_name, device="cpu", compute_type="int8",
+                                      local_files_only=self.offline)
+        except Exception:
+            if self.offline:
+                log("Offline model unavailable; cache it during an explicit online setup or use a local model path")
+            raise
         log("model loaded")
 
     def cleanup(self) -> None:
