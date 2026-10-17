@@ -14,6 +14,7 @@ from hermeskey_system_tools import UNITS
 
 class SystemPanel(QWidget):
     restartRequested = Signal(object)
+    openConfigRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -39,8 +40,10 @@ class SystemPanel(QWidget):
         row = QHBoxLayout()
         self.logs_button = QPushButton("Open logs")
         self.doctor_button = QPushButton("Run Doctor")
+        self.config_button = QPushButton("Open advanced config file")
         row.addWidget(self.logs_button)
         row.addWidget(self.doctor_button)
+        row.addWidget(self.config_button)
         row.addStretch()
         layout.addLayout(row)
         hint = QLabel("Restarts can interrupt recording, transcription or typing. Logs and diagnostics stay on this machine; review before sharing.")
@@ -53,6 +56,7 @@ class SystemPanel(QWidget):
         self.both_button.clicked.connect(lambda: self.restartRequested.emit(UNITS))
         self.logs_button.clicked.connect(lambda: self.show_report("Logs", [sys.executable, str(Path(__file__).with_name("hermeskey_system_tools.py")), "logs"]))
         self.doctor_button.clicked.connect(lambda: self.show_report("Doctor", ["bash", str(Path(__file__).with_name("hermeskey-doctor"))]))
+        self.config_button.clicked.connect(self.openConfigRequested.emit)
         self.poll = QTimer(self)
         self.poll.setInterval(8000)
         self.poll.timeout.connect(self.refresh)
@@ -147,7 +151,7 @@ class SystemPanel(QWidget):
             self.set_actions_enabled(True)
 
     def set_actions_enabled(self, enabled):
-        for button in (self.speech_button, self.typing_button, self.both_button, self.doctor_button, self.logs_button):
+        for button in (self.speech_button, self.typing_button, self.both_button, self.doctor_button, self.logs_button, self.config_button):
             button.setEnabled(enabled)
 
     def show_report(self, title, command):

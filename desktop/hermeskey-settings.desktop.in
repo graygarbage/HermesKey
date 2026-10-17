@@ -2,7 +2,7 @@
 Type=Application
 Version=1.0
 Name=HermesKey Settings
-Comment=Open the HermesKey settings window (preview)
+Comment=Configure HermesKey and check its services
 Exec=@BIN_DEST@/hermeskey-settings.py
 Icon=hermeskey
 Terminal=false

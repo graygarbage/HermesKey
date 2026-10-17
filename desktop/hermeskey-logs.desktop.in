@@ -6,5 +6,6 @@ Comment=View HermesKey runtime and service logs
 Exec=@BIN_DEST@/hermeskey-open-logs
 Icon=hermeskey
 Terminal=false
+NoDisplay=true
 Categories=Utility;AudioVideo;
 Keywords=speech;dictation;whisper;wayland;logs;

@@ -1,25 +1,18 @@
 # Desktop integration
 
-HermesKey is primarily a hotkey-driven tool, but the installer also ships a few desktop launchers for convenience.
+HermesKey is primarily hotkey-driven. KDE's app menu has **one visible entry: HermesKey Settings**. The Settings window handles common configuration, service status, restarts, logs, Doctor and opening the advanced config file.
 
-## Installed launchers
+## Desktop compatibility
 
-- **HermesKey Control Center** — one place for status, diagnostics, config, logs, and service restart
-- **HermesKey Status** — shows runtime and service status
-- **HermesKey Doctor** — runs diagnostics and shows the report
-- **HermesKey Logs** — shows runtime and service logs
-- **HermesKey Config** — opens `~/.config/hermeskey/hermeskey.env`
-- **HermesKey Settings (preview)** — configure common settings and view live user-service status, restart services, inspect logs, or run Doctor
-
-These launchers are installed into:
+The old Control Center, Status, Doctor, Logs and Config desktop IDs are still installed with `NoDisplay=true`. They remain launchable from existing pinned shortcuts but do not clutter the app menu. `hermeskey-control-center` now opens the Settings window; the other CLI helper commands remain available for scripts and troubleshooting. Reinstalling upgrades previously visible entries to hidden ones without removing their desktop IDs. These files live in:
 
 ```bash
 ~/.local/share/applications/
 ```
 
-The control-center launcher uses `kdialog` on KDE when available and falls back to `zenity` or plain terminal output. It can also open the settings preview. The settings window requires the system's PySide6 QtWidgets package (already used by the overlay) and can be launched with `~/.local/bin/hermeskey-settings.py`.
+Settings requires the system's PySide6 QtWidgets package (already used by the overlay) and can also be launched with `~/.local/bin/hermeskey-settings.py`. The AppStream launchable points to the visible Settings desktop ID.
 
-The settings preview edits **only `MODEL`, `STT_LANG`, `RECORD_SOURCE`, `INSERT_MODE`, `COPY_TO_CLIPBOARD`, `FOCUS_SAFE_MODE`, `OVERLAY_ENABLED`, and `SOUND_ENABLED`** in `~/.config/hermeskey/hermeskey.env`, the path the user systemd service reads. Save writes and closes; Apply writes and stays open; Cancel discards. Closing with unsaved changes asks first. The GUI preserves other settings and comments, refuses unsupported/duplicate managed assignments and external file changes, and validates before writing. After a model/language save it offers a speech-service restart; microphone and behavior-only changes take effect on the next hotkey invocation without restarting the service. Other settings still require the Config launcher. Alternate `XDG_CONFIG_HOME` paths are not yet used by the systemd unit, so the GUI warns and targets the canonical path.
+The Settings window edits **only `MODEL`, `STT_LANG`, `RECORD_SOURCE`, `INSERT_MODE`, `COPY_TO_CLIPBOARD`, `FOCUS_SAFE_MODE`, `OVERLAY_ENABLED`, and `SOUND_ENABLED`** in `~/.config/hermeskey/hermeskey.env`, the path the user systemd service reads. Save writes and closes; Apply writes and stays open; Cancel discards. Closing with unsaved changes asks first. The GUI preserves other settings and comments, refuses unsupported/duplicate managed assignments and external file changes, and validates before writing. After a model/language save it offers a speech-service restart; microphone and behavior-only changes take effect on the next hotkey invocation without restarting the service. For other settings, use **Open advanced config file** on the System page. Save or discard any unsaved GUI changes before opening it; reopen Settings after editing the file externally. Alternate `XDG_CONFIG_HOME` paths are not yet used by the systemd unit, so the GUI warns and targets the canonical path.
 
 The System page distinguishes systemd's *active* state from a speech model answering on its socket or a typing socket accepting connections. It refreshes while visible, and a successful `systemctl` restart is shown as **requested**, not immediately ready. Restart buttons confirm interruption risk and require you to save or discard pending edits first. Doctor and the bounded log excerpt open locally in a read-only viewer; they are not uploaded or automatically copied. Review logs before sharing, even though HermesKey's own speech-server logging is diagnostic-only.
 

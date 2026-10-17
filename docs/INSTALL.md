@@ -130,14 +130,7 @@ systemctl --user status hermeskey-ydotoold.service
 
 ## Desktop launchers
 
-The installer also adds local desktop launchers for:
-
-- HermesKey Control Center
-- HermesKey Status
-- HermesKey Doctor
-- HermesKey Logs
-- HermesKey Config
-- HermesKey Settings (preview; choose microphone, model, language, and common behavior)
+The installer adds one visible app-menu entry, **HermesKey Settings**. Its System page includes status, restart, logs, Doctor, and an advanced config-file action. Older desktop IDs are installed hidden for pinned-shortcut compatibility; CLI tools remain available. Upgrading an older install overwrites its visible helper launchers with hidden versions.
 
 For actual dictation, keep binding your hotkey to:
 

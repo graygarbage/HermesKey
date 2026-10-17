@@ -7,8 +7,8 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QProcess, QTimer
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QProcess, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -161,6 +161,7 @@ class SettingsWindow(QMainWindow):
             elif name == "System":
                 self.system_panel = SystemPanel(page)
                 self.system_panel.restartRequested.connect(self.request_service_restart)
+                self.system_panel.openConfigRequested.connect(self.open_advanced_config)
                 page_layout.addWidget(self.system_panel)
             page_layout.addStretch()
             self.pages.addWidget(page)
@@ -220,6 +221,18 @@ class SettingsWindow(QMainWindow):
         self.update_language_control()
         self.update_insert_mode()
         self.update_buttons()
+
+    def open_advanced_config(self) -> None:
+        if self.changes():
+            QMessageBox.information(self, "Unsaved settings", "Save or discard changes before editing the config file externally.")
+            return
+        if not self.path.is_file():
+            QMessageBox.warning(self, "Config missing", f"No config file found at {self.path}. Rerun the installer.")
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.path))):
+            QMessageBox.warning(self, "Could not open config", f"Open this file in your text editor: {self.path}")
+            return
+        self.notice.setText("Advanced config opened externally. Reopen Settings after editing to load any changes.")
 
     def system_page_changed(self, row: int) -> None:
         if row == 3:

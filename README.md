@@ -66,7 +66,7 @@ hermeskey-doctor
 - click-through overlay for `Recording` and `Transcribing`
 - soft audio cues instead of harsh beeps
 - Wayland-friendly typing through a user-owned `ydotoold` service
-- desktop helpers for status, diagnostics, logs, and config access
+- one Settings window for configuration, service status, diagnostics, and logs
 
 ## CLI
 
@@ -79,14 +79,7 @@ hermeskey --doctor
 
 ## Desktop integration
 
-The installer also adds local desktop launchers for:
-
-- HermesKey Control Center
-- HermesKey Status
-- HermesKey Doctor
-- HermesKey Logs
-- HermesKey Config
-- HermesKey Settings (preview; choose microphone, model, language, and common behavior)
+The app menu has one visible entry: **HermesKey Settings**. It includes configuration, service status, logs, Doctor, and an advanced config-file action. The individual CLI helpers remain available; legacy desktop IDs are hidden but retained for existing shortcuts.
 
 For actual dictation, keep binding your hotkey directly to:
 
