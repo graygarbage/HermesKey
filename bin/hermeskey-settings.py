@@ -44,7 +44,8 @@ LANGUAGE_PRESETS = (
     ("Chinese", "zh"), ("Hawaiian", "haw"), ("Cantonese", "yue"),
 )
 SECTIONS = (
-    ("Speech", "Choose the input, model and spoken language. Selecting a model does not download it."),
+    ("Speech", "Choose your microphone, model and language you speak (or Auto-detect). "
+     "HermesKey transcribes; it does not translate speech. Selecting a model does not download it."),
     ("Input", "Control typing, clipboard backup and focus safety."),
     ("Appearance", "Toggle the overlay and audio cues."),
     ("System", "Check service readiness, restart user services, and review local diagnostics."),
@@ -97,6 +98,7 @@ class SettingsWindow(QMainWindow):
             detail.setWordWrap(True)
             page_layout.addWidget(detail)
             if name == "Speech":
+                self.language_hint = detail
                 form = QFormLayout()
                 self.model_picker = QComboBox()
                 self.model_picker.setObjectName("model_picker")
@@ -118,16 +120,10 @@ class SettingsWindow(QMainWindow):
                 self.language_custom_label = QLabel("Other code:")
                 self.language_label = QLabel("Spoken language:")
                 self.language_label.setBuddy(self.language_picker)
-                self.language_hint = QLabel(
-                    "Choose the language you speak (or Auto-detect). "
-                    "HermesKey transcribes speech; it does not translate into the selected language."
-                )
-                self.language_hint.setWordWrap(True)
                 form.addRow("Model:", self.model_picker)
                 form.addRow(self.model_custom_label, self.model_edit)
                 form.addRow(self.language_label, self.language_picker)
                 form.addRow(self.language_custom_label, self.language_edit)
-                form.addRow("", self.language_hint)
                 self.offline_toggle = QCheckBox("Strict offline speech model (cached or local only)")
                 self.offline_toggle.setObjectName("offline_toggle")
                 self.offline_toggle.setToolTip("Stops model metadata requests and downloads on speech-service startup. Cache the model first; restart required.")
