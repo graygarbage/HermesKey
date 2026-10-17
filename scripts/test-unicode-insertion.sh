@@ -5,8 +5,12 @@ cd "$(dirname -- "${BASH_SOURCE[0]}")/.."
 ROOT="$PWD"
 TMP="$(mktemp -d)"
 cleanup() {
-  [[ -f "$TMP/runtime/hermeskey_recording.pid" ]] && kill "$(<"$TMP/runtime/hermeskey_recording.pid")" 2>/dev/null || true
-  [[ -n "${socket_pid:-}" ]] && kill "$socket_pid" 2>/dev/null || true
+  if [[ -f "$TMP/runtime/hermeskey_recording.pid" ]]; then
+    kill "$(<"$TMP/runtime/hermeskey_recording.pid")" 2>/dev/null || true
+  fi
+  if [[ -n "${socket_pid:-}" ]]; then
+    kill "$socket_pid" 2>/dev/null || true
+  fi
   rm -rf "$TMP"
 }
 trap cleanup EXIT
