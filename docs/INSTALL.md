@@ -83,7 +83,7 @@ Bootstrap exits with an error if validation fails **after** installing files; ru
 curl -fsSL https://raw.githubusercontent.com/graygarbage/HermesKey/main/scripts/bootstrap.sh | bash
 ```
 
-To install from the current `main` branch instead of the latest release:
+The standard command selects the latest published release. If GitHub's release API is unavailable or the archive cannot be resolved, bootstrap **stops without installing** rather than silently substituting untagged `main` code. Retry later, or consciously opt into the current `main` branch instead:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/graygarbage/HermesKey/main/scripts/bootstrap.sh | bash -s -- --main

@@ -36,6 +36,9 @@ bash scripts/test-unicode-insertion.sh
 echo "Preserved config"
 bash scripts/test-check-config.sh
 
+echo "Bootstrap release channel"
+bash scripts/test-bootstrap-channel.sh
+
 echo "Doctor config validation"
 bash scripts/test-doctor-config.sh
 

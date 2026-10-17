@@ -108,10 +108,7 @@ download_url() {
     return 0
   fi
 
-  latest_asset_url || {
-    warn "Could not resolve latest release asset, falling back to main branch archive."
-    printf '%s\n' "$MAIN_TARBALL_URL"
-  }
+  latest_asset_url || fail "Could not resolve the latest release archive; refusing to install from main. Retry later, or explicitly pass --main if you want untagged code."
 }
 
 setup_python_env() {
