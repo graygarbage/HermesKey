@@ -31,6 +31,14 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ./scripts/check.sh
 
+      - name: Verify pinned speech dependencies in a clean venv
+        run: |
+          /usr/bin/python3 -m venv "$RUNNER_TEMP/hermeskey-speech-venv"
+          "$RUNNER_TEMP/hermeskey-speech-venv/bin/python" -m pip install --only-binary=:all: --no-input --disable-pip-version-check -r requirements.txt
+          "$RUNNER_TEMP/hermeskey-speech-venv/bin/python" -m pip check
+          HERMESKEY_OFFLINE=1 HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 \
+            "$RUNNER_TEMP/hermeskey-speech-venv/bin/python" -c 'import av, ctranslate2, faster_whisper; print("Pinned speech imports ready")'
+
       - name: Build release archive
         run: |
           chmod +x scripts/build-release.sh

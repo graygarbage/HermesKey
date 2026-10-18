@@ -126,9 +126,11 @@ setup_python_env() {
     ok "Using existing venv: $VENV_DIR"
   fi
 
-  "$VENV_DIR/bin/python" -m pip install -U pip wheel >/dev/null
-  "$VENV_DIR/bin/pip" install -r "$ROOT/requirements.txt"
-  ok "Python dependencies installed"
+  # No unreviewed pip/wheel upgrade or source build during installation.
+  # Every runtime dependency in requirements.txt has an exact version pin.
+  "$VENV_DIR/bin/python" -m pip install --only-binary=:all: --no-input --disable-pip-version-check -r "$ROOT/requirements.txt"
+  "$VENV_DIR/bin/python" -m pip check || fail "Speech dependencies conflict; inspect the venv privately before restarting services."
+  ok "Pinned Python dependencies installed"
 }
 
 banner
