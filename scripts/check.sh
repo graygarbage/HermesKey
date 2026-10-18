@@ -17,9 +17,10 @@ done
 echo "Shell syntax (${#shell_scripts[@]} scripts)"
 bash -n "${shell_scripts[@]}"
 
-echo "Python syntax"
-python3 -m py_compile bin/hermeskey-server.py bin/hermeskey-overlay.py bin/hermeskey-settings.py bin/hermeskey_settings_config.py bin/hermeskey_audio_sources.py bin/hermeskey_system_panel.py bin/hermeskey_system_tools.py scripts/verify-install.py
-python3 -m unittest discover -s tests -p 'test_*.py'
+echo "Python syntax and tests (${HERMESKEY_CHECK_PYTHON:-python3})"
+check_python="${HERMESKEY_CHECK_PYTHON:-python3}"
+"$check_python" -m py_compile bin/hermeskey-server.py bin/hermeskey-overlay.py bin/hermeskey-settings.py bin/hermeskey_settings_config.py bin/hermeskey_audio_sources.py bin/hermeskey_system_panel.py bin/hermeskey_system_tools.py scripts/verify-install.py scripts/run-tests.py
+"$check_python" scripts/run-tests.py
 
 echo "systemd units"
 systemd-analyze --user verify systemd/user/hermeskey.service systemd/user/hermeskey-ydotoold.service

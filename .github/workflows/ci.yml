@@ -6,21 +6,29 @@ on:
 
 jobs:
   lint-syntax-and-package:
-    runs-on: ubuntu-latest
+    # Keep apt/runtime behavior stable while ubuntu-latest changes releases.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck systemd
+          sudo apt-get install -y shellcheck systemd python3-venv libegl1 libopengl0 libgl1 libxkbcommon-x11-0
+          # Noble does not ship a python3-pyside6.qtwidgets apt package. Keep
+          # Qt in a pinned, isolated venv and use its Python for ALL unit tests.
+          /usr/bin/python3 -m venv "$RUNNER_TEMP/hermeskey-qt-venv"
+          "$RUNNER_TEMP/hermeskey-qt-venv/bin/python" -m pip install --disable-pip-version-check 'PySide6==6.8.3'
           if ! command -v ydotoold >/dev/null 2>&1; then
             sudo install -Dm755 /bin/true /usr/bin/ydotoold
           fi
 
-      - name: Checks (shell syntax, shellcheck, Python syntax, systemd units)
+      - name: Checks (including required offscreen Settings tests)
         env:
           REQUIRE_SHELLCHECK: "1"
+          HERMESKEY_REQUIRE_GUI_TESTS: "1"
+          HERMESKEY_CHECK_PYTHON: ${{ runner.temp }}/hermeskey-qt-venv/bin/python
+          QT_QPA_PLATFORM: offscreen
         run: ./scripts/check.sh
 
       - name: Build release archive
