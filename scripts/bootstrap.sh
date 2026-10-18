@@ -111,6 +111,7 @@ PY
 trusted_release_digest() {
   case "$1" in
     v0.6.3) printf '%s\n' '167bd4336d875af01b115869cb1b8e85baa35fb316d6364f728b7138d499929a' ;;
+    v0.6.4) printf '%s\n' '6f046010a3ce0afd58535739d4bc560bc42cd0dac3d5a2eba58caac412219900' ;;
     *) return 1 ;;
   esac
 }
