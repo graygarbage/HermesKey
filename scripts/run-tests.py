@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the suite and fail CI closed if headless GUI coverage disappears."""
 import os
+import re
 import sys
 import unittest
 
@@ -21,8 +22,12 @@ def main() -> int:
             return 1
         try:
             from PySide6.QtWidgets import QApplication  # noqa: F401
-        except ImportError:
-            print("CI requires PySide6 for the test Python; GUI tests cannot skip.", file=sys.stderr)
+        except ImportError as exc:
+            # Keep CI diagnostics useful without dumping an uncontrolled
+            # import exception (which may contain private filesystem paths).
+            library = re.search(r"\blib[A-Za-z0-9_+.-]+\.so(?:\.[0-9]+)*\b", str(exc))
+            reason = f"missing {library.group()}" if library else "Qt import failed"
+            print(f"CI requires PySide6 for the test Python ({reason}); GUI tests cannot skip.", file=sys.stderr)
             return 1
 
     suite = unittest.defaultTestLoader.discover("tests", pattern="test_*.py")
