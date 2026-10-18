@@ -111,6 +111,40 @@ download_url() {
   latest_asset_url || fail "Could not resolve the latest release archive; refusing to install from main. Retry later, or explicitly pass --main if you want untagged code."
 }
 
+# v0.6.3 predates the reviewed lock. Its archive is still the current public
+# release, so a newer trusted bootstrap must override its broad ranges instead
+# of silently resolving them. The exact pins are mirrored in requirements.txt
+# and tested for equality; remove this compatibility block after that release
+# is no longer offered by the default channel.
+reviewed_legacy_requirements() {
+  cat <<'PINS'
+faster-whisper==1.2.1
+av==18.0.0
+ctranslate2==4.8.1
+huggingface-hub==1.27.0
+tokenizers==0.23.1
+onnxruntime==1.28.0
+numpy==2.5.2
+PyYAML==6.0.3
+setuptools==84.0.0
+tqdm==4.70.0
+anyio==4.14.2
+certifi==2026.7.22
+click==8.4.2
+filelock==3.32.2
+flatbuffers==25.12.19
+fsspec==2026.7.0
+h11==0.16.0
+hf-xet==1.6.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.18
+packaging==26.3
+protobuf==7.35.1
+typing-extensions==4.16.0
+PINS
+}
+
 setup_python_env() {
   [[ "$SKIP_VENV" == "1" ]] && {
     warn "Skipping Python environment setup because --skip-venv was requested."
@@ -127,8 +161,12 @@ setup_python_env() {
   fi
 
   # No unreviewed pip/wheel upgrade or source build during installation.
-  # Every runtime dependency in requirements.txt has an exact version pin.
-  "$VENV_DIR/bin/python" -m pip install --only-binary=:all: --no-input --disable-pip-version-check -r "$ROOT/requirements.txt"
+  local requirements="$ROOT/requirements.txt"
+  if [[ "$LOCAL_SOURCE" == 0 && "$CHANNEL" == "release" && "$(tr -d '[:space:]' <"$ROOT/VERSION")" == "0.6.3" ]]; then
+    requirements="$TMP_DIR/reviewed-speech-requirements.txt"
+    reviewed_legacy_requirements >"$requirements"
+  fi
+  "$VENV_DIR/bin/python" -m pip install --only-binary=:all: --no-input --disable-pip-version-check -r "$requirements"
   "$VENV_DIR/bin/python" -m pip check || fail "Speech dependencies conflict; inspect the venv privately before restarting services."
   ok "Pinned Python dependencies installed"
 }
