@@ -69,8 +69,6 @@ SERVER_SCRIPT="$SERVER_SCRIPT_DEFAULT"
 OVERLAY_SCRIPT="$OVERLAY_SCRIPT_DEFAULT"
 
 LOG="${LOG:-$STATE_DIR/hermeskey.log}"
-SERVER_LOG="${SERVER_LOG:-$STATE_DIR/hermeskey-server.log}"
-OVERLAY_LOG="${OVERLAY_LOG:-$STATE_DIR/hermeskey-overlay.log}"
 VERSION="${HERMESKEY_VERSION:-}"
 if [[ -z "$VERSION" && -r "$VERSION_FILE" ]]; then
   VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
@@ -80,10 +78,30 @@ if [[ -z "$VERSION" && -r "$SCRIPT_DIR/../VERSION" ]]; then
 fi
 [[ -n "$VERSION" ]] || VERSION="dev"
 
-mkdir -p "$(dirname -- "$LOG")" "$(dirname -- "$SERVER_LOG")" "$(dirname -- "$OVERLAY_LOG")"
+mkdir -p "$STATE_DIR" "$(dirname -- "$LOG")"
 touch "$LOG"
 
-log() { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
+# The hotkey log has at most two 256 KiB files. Keep the lock separate from
+# the toggle lock because support commands and shortcuts may log concurrently.
+log() {
+  local line size
+  line="[$(date '+%F %T')] $*"
+  (
+    flock -x 9 || exit 1
+    size="$(stat -c %s -- "$LOG" 2>/dev/null || echo 0)"
+    if (( size + ${#line} + 1 > 262144 )); then
+      if (( size > 262144 )); then
+        # An older unbounded log must not become an unbounded backup.
+        : >"$LOG"
+        rm -f -- "$LOG.1"
+      else
+        mv -f -- "$LOG" "$LOG.1"
+      fi
+    fi
+    printf '%s\n' "$line" >>"$LOG"
+  ) 9>>"$STATE_DIR/log.lock" 2>/dev/null || true
+  printf '%s\n' "$line"
+}
 
 private_runtime_ready() {
   local mode path
@@ -335,15 +353,14 @@ read_app_vars() {
 }
 
 capture_target_app() {
-  # Focus safety only needs the UUID and desktop file. Do not retain window
+  # Focus safety only needs the UUID. Do not retain desktop IDs or window
   # captions (which can contain document titles or user-entered text).
-  query_active_app TARGET_ | grep -E '^TARGET_(UUID|DESKTOP_FILE)=' >"$TARGET_STATE"
+  query_active_app TARGET_ | grep -E '^TARGET_UUID=' >"$TARGET_STATE"
   log "Target window captured for focus safety"
 }
 
 load_target_app() {
   TARGET_UUID=""
-  TARGET_DESKTOP_FILE=""
   if [[ -f "$TARGET_STATE" ]]; then
     read_app_vars TARGET_ <"$TARGET_STATE"
   fi
@@ -379,7 +396,7 @@ for pattern in patterns:
     if re.search(pattern, hay, flags=re.IGNORECASE):
         raise SystemExit(0)
 raise SystemExit(1)
-'
+' 2>/dev/null
 }
 
 choose_paste_shortcut() {
@@ -412,7 +429,7 @@ focus_is_safe() {
     return 0
   fi
 
-  log "Focus changed: target=${TARGET_DESKTOP_FILE:-?}/${TARGET_UUID:-?} current=${CURRENT_DESKTOP_FILE:-?}/${CURRENT_UUID:-?}"
+  log "Focus changed; insertion blocked"
   return 1
 }
 
@@ -435,7 +452,8 @@ show_overlay() {
   [[ "$OVERLAY_ENABLED" == "1" ]] || return 0
   local mode="$1"
   hide_overlay
-  nohup python3 "$OVERLAY_SCRIPT" "$mode" >>"$OVERLAY_LOG" 2>&1 &
+  # Overlay stderr is external/unbounded and may contain paths or desktop data.
+  nohup python3 "$OVERLAY_SCRIPT" "$mode" >/dev/null 2>&1 &
   local pid=$! ticks
   ticks="$(process_start_ticks "$pid" 2>/dev/null || true)"
   if [[ -n "$ticks" ]]; then
@@ -482,12 +500,12 @@ COPIED=0
 copy_text() {
   local text="$1"
   [[ "$COPIED" == "1" ]] && return 0
-  if ! printf '%s' "$text" | "$CLIP_CMD"; then
-    log "Clipboard copy command failed."
+  if ! printf '%s' "$text" | "$CLIP_CMD" >/dev/null 2>&1; then
+    log "Clipboard copy failed"
     return 1
   fi
   COPIED=1
-  log "Copied transcription to clipboard (${#text} chars)."
+  log "Clipboard backup created"
 }
 
 resolve_ydotool_socket() {
@@ -540,19 +558,19 @@ type_text() {
       if [[ "$type_help" == *--key-hold* ]]; then
         timing+=(--key-hold "$TYPE_KEY_HOLD")
       fi
-      printf '%s' "$text" | YDOTOOL_SOCKET="$ysock" "$ydotool_bin" type "${timing[@]}" --file=-
+      printf '%s' "$text" | YDOTOOL_SOCKET="$ysock" "$ydotool_bin" type "${timing[@]}" --file=- >/dev/null 2>&1
       ;;
     wtype)
-      printf '%s' "$text" | "$wtype_bin" -
+      printf '%s' "$text" | "$wtype_bin" - >/dev/null 2>&1
       ;;
     xdotool)
-      printf '%s' "$text" | "$xdotool_bin" type --clearmodifiers --delay "$TYPE_KEY_DELAY" --file -
+      printf '%s' "$text" | "$xdotool_bin" type --clearmodifiers --delay "$TYPE_KEY_DELAY" --file - >/dev/null 2>&1
       ;;
     none)
       return 2
       ;;
     *)
-      log "Unknown TYPE_BACKEND: $backend"
+      log "Unsupported typing backend setting"
       return 3
       ;;
   esac
@@ -582,26 +600,26 @@ paste_text() {
       fi
       case "$shortcut" in
         ctrl-v)
-          YDOTOOL_SOCKET="$ysock" "$ydotool_bin" key 29:1 47:1 47:0 29:0
+          YDOTOOL_SOCKET="$ysock" "$ydotool_bin" key 29:1 47:1 47:0 29:0 >/dev/null 2>&1
           ;;
         ctrl-shift-v)
-          YDOTOOL_SOCKET="$ysock" "$ydotool_bin" key 29:1 42:1 47:1 47:0 42:0 29:0
+          YDOTOOL_SOCKET="$ysock" "$ydotool_bin" key 29:1 42:1 47:1 47:0 42:0 29:0 >/dev/null 2>&1
           ;;
         shift-insert)
-          YDOTOOL_SOCKET="$ysock" "$ydotool_bin" key 42:1 110:1 110:0 42:0
+          YDOTOOL_SOCKET="$ysock" "$ydotool_bin" key 42:1 110:1 110:0 42:0 >/dev/null 2>&1
           ;;
         *)
-          log "Unknown paste shortcut: $shortcut"
+          log "Unsupported paste shortcut setting"
           return 5
           ;;
       esac
       ;;
     xdotool)
       case "$shortcut" in
-        ctrl-v) "$xdotool_bin" key --clearmodifiers ctrl+v ;;
-        ctrl-shift-v) "$xdotool_bin" key --clearmodifiers ctrl+shift+v ;;
-        shift-insert) "$xdotool_bin" key --clearmodifiers Shift+Insert ;;
-        *) log "Unknown paste shortcut: $shortcut"; return 5 ;;
+        ctrl-v) "$xdotool_bin" key --clearmodifiers ctrl+v >/dev/null 2>&1 ;;
+        ctrl-shift-v) "$xdotool_bin" key --clearmodifiers ctrl+shift+v >/dev/null 2>&1 ;;
+        shift-insert) "$xdotool_bin" key --clearmodifiers Shift+Insert >/dev/null 2>&1 ;;
+        *) log "Unsupported paste shortcut setting"; return 5 ;;
       esac
       ;;
     *)
@@ -653,7 +671,7 @@ insert_text() {
   CURRENT_UUID="" CURRENT_DESKTOP_FILE="" CURRENT_RESOURCE_CLASS="" CURRENT_CAPTION=""
   if [[ "$FOCUS_SAFE_MODE" == "1" || "$want_paste" == "1" ]]; then
     load_current_app
-    log "Active app: ${CURRENT_DESKTOP_FILE:-?} | ${CURRENT_RESOURCE_CLASS:-?}"
+    log "Active app detection attempted"
   fi
 
   if ! focus_is_safe; then
@@ -680,7 +698,7 @@ insert_text() {
     fi
     paste_text "$CURRENT_DESKTOP_FILE" "$CURRENT_RESOURCE_CLASS" "$CURRENT_CAPTION" || rc=$?
     if (( rc == 0 )); then
-      log "Sent Unicode paste shortcut (${#text} chars); transcript backed up on clipboard."
+      log "Unicode paste shortcut sent; clipboard backup available"
       echo "Paste shortcut sent; transcript on clipboard."
     else
       log "Unicode paste shortcut unavailable (code $rc); transcript backed up on clipboard."
@@ -703,14 +721,14 @@ insert_text() {
   if [[ "$want_paste" == "1" ]] && app_matches_patterns "$PASTE_FOR_APPS" "$CURRENT_DESKTOP_FILE" "$CURRENT_RESOURCE_CLASS" "$CURRENT_CAPTION"; then
     paste_text "$CURRENT_DESKTOP_FILE" "$CURRENT_RESOURCE_CLASS" "$CURRENT_CAPTION" || rc=$?
     if (( rc == 0 )); then
-      log "Pasted transcription into active app (${#text} chars)."
+      log "Paste shortcut sent to active app"
       echo "Pasted into active app."
       return 0
     fi
   else
     type_text "$text" || rc=$?
     if (( rc == 0 )); then
-      log "Typed transcription into active app (${#text} chars)."
+      log "Typed into active app"
       if (( ! copy_ok )); then
         notify-send "$APP_NAME" "Text was typed, but clipboard backup failed." || true
         echo "Typed into active app (clipboard backup failed)."
@@ -808,17 +826,19 @@ ensure_server() {
   if service_running; then
     waiting_for="hermeskey.service"
   elif own_server_alive; then
-    waiting_for="STT server pid $(cat "$SERVER_PID")"
+    waiting_for="hotkey-started server"
   fi
 
   if [[ -n "$waiting_for" ]]; then
-    log "Speech model still loading in $waiting_for; waiting"
+    log "Speech model still loading; waiting"
     notify-send "$APP_NAME" "Speech model is still loading…" || true
   else
     rm -f "$SOCK"
     log "Starting STT server"
-    SOCK="$SOCK" MODEL="$MODEL" STT_LANG="$STT_LANG" \
-      nohup "$PYTHON_STT" "$SERVER_SCRIPT" >>"$SERVER_LOG" 2>&1 &
+    # External output can contain paths/request data and can grow without
+    # bound. The hotkey log retains only HermesKey's status events.
+    export SOCK MODEL STT_LANG
+    nohup "$PYTHON_STT" "$SERVER_SCRIPT" >/dev/null 2>&1 &
     echo $! >"$SERVER_PID"
   fi
 
@@ -860,7 +880,7 @@ record_start() {
     -f pulse -i "$RECORD_SOURCE" \
     -ac 1 -ar 16000 \
     -loglevel error \
-    "$WAV" &
+    "$WAV" >/dev/null 2>&1 &
   local pid=$! ticks
   ticks="$(process_start_ticks "$pid" 2>/dev/null || true)"
   if [[ -z "$ticks" ]]; then
@@ -924,7 +944,7 @@ discard_audio() {
 record_stop_and_transcribe() {
   if [[ ! -f "$STATE" ]]; then
     echo "Not recording."
-    log "Stop requested but no $STATE found"
+    log "Stop requested without active recording"
     hide_overlay
     return
   fi
@@ -966,19 +986,19 @@ record_stop_and_transcribe() {
 
   if [[ ! -s "$WAV" ]]; then
     hide_overlay
-    log "WAV missing or empty: $WAV"
+    log "Audio missing or empty"
     notify-send "$APP_NAME" "No audio captured" || true
     echo "No audio captured."
     return
   fi
 
-  log "WAV size: $(stat -c%s "$WAV" 2>/dev/null || echo '?') bytes"
+  log "Audio captured"
   show_overlay transcribing
 
   ensure_server
 
   local reply transcription reply_ok=1
-  reply="$(request_transcription 2>>"$LOG")" || reply_ok=0
+  reply="$(request_transcription 2>/dev/null)" || reply_ok=0
   discard_audio
 
   if [[ "$reply_ok" != "1" ]]; then
@@ -989,7 +1009,7 @@ record_stop_and_transcribe() {
     return
   fi
 
-  if ! transcription="$(printf '%s' "$reply" | extract_text 2>>"$LOG")"; then
+  if ! transcription="$(printf '%s' "$reply" | extract_text 2>/dev/null)"; then
     hide_overlay
     log "STT server returned an error"
     notify-send "$APP_NAME" "Speech transcription failed" || true

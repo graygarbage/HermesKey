@@ -17,7 +17,7 @@ Please gather:
 - `echo $XDG_SESSION_TYPE`
 - whether `ydotool` works by itself
 - `hermeskey-doctor` results, reviewed for anything personal before sharing
-- relevant log or `systemctl --user status hermeskey.service` excerpts **for local review first**; share only the minimum needed after redacting paths, device/app names, URLs and other personal information. Never post recordings, dictated text, tokens, full config files or raw journals publicly. For a suspected vulnerability, follow [SECURITY.md](SECURITY.md) instead of posting details in an issue.
+- fixed failure category and approximate time from the local hotkey log **for local review first**; the log is size-bounded, but older log history and direct third-party/systemd journal output may still contain personal data. Share only the minimum needed after redacting paths, device/app names, URLs and other personal information. Never post recordings, dictated text, tokens, full config files or raw journals publicly. See [Troubleshooting](docs/TROUBLESHOOTING.md) for what is logged and how to clear local history. For a suspected vulnerability, follow [SECURITY.md](SECURITY.md) instead of posting details in an issue.
 
 ## Questions
 

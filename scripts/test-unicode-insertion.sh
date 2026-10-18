@@ -25,17 +25,28 @@ chmod 777 "$TMP/shared"
 cat >"$TMP/bin/ffmpeg" <<'EOF'
 #!/usr/bin/env bash
 printf 'fake audio' >"${*: -1}"
+printf '%s\n' "PRIVATE_SYNTHETIC_RECORDER_ERROR ${TEST_SOURCE:-}" >&2
 trap 'exit 0' TERM
 while :; do sleep 0.1 & wait "$!" || :; done
 EOF
 cat >"$TMP/bin/nc" <<'EOF'
 #!/usr/bin/env bash
-exit 0
+[[ "${TEST_REQUIRE_SERVER_READY:-0}" != 1 || -e "$TEST_TMP/server-ready" ]]
+EOF
+cat >"$TMP/bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+exit 1
 EOF
 cat >"$TMP/bin/python3" <<'EOF'
 #!/usr/bin/env bash
-if [[ "${1:-}" == '-' && -n "${REQUEST_WAV:-}" ]]; then
-  TEST_TEXT="$TEST_TEXT" exec /usr/bin/python3 -c 'import json,os; print(json.dumps({"status":"ok","text":os.environ["TEST_TEXT"]}))'
+if [[ "${1:-}" == "$TEST_TMP/hermeskey-server-fake.py" ]]; then
+  printf '%s\n' "$SOCK $MODEL $STT_LANG" >"$TEST_TMP/server-env"
+  echo PRIVATE_SYNTHETIC_SERVER_OUTPUT
+  echo PRIVATE_SYNTHETIC_SERVER_ERROR >&2
+  touch "$TEST_TMP/server-ready"
+  exit 0
+elif [[ "${1:-}" == '-' && -n "${REQUEST_WAV:-}" ]]; then
+  TEST_TEXT="$TEST_TEXT" exec /usr/bin/python3 -c 'import json,os; print(json.dumps({"status":"error","error":"PRIVATE_SYNTHETIC_REQUEST_PATH"} if os.getenv("TEST_SERVER_ERROR") == "1" else {"status":"ok","text":os.environ["TEST_TEXT"]}))'
 else
   if [[ "${1:-}" == -c && "${2:-}" == *'patterns ='* ]]; then
     printf '%s\0' "$@" >"$TEST_TMP/app-argv"
@@ -53,7 +64,7 @@ printf '%s\0' "$@" >"$TEST_TMP/backend-argv"
 printf '%s\n' "$1" >>"$TEST_TMP/events"
 if [[ "$1" == type ]]; then cat >"$TEST_TMP/typed"; fi
 [[ "$1" != key || "${TEST_FAIL_KEY:-0}" != 1 ]] || exit 4
-[[ "$1" != type || "${TEST_FAIL_TYPE:-0}" != 1 ]] || exit 4
+[[ "$1" != type || "${TEST_FAIL_TYPE:-0}" != 1 ]] || { echo PRIVATE_SYNTHETIC_BACKEND_ERROR >&2; exit 4; }
 EOF
 cat >"$TMP/bin/wtype" <<'EOF'
 #!/usr/bin/env bash
@@ -71,7 +82,7 @@ cat >"$TEST_TMP/typed"
 EOF
 cat >"$TMP/bin/wl-copy" <<'EOF'
 #!/usr/bin/env bash
-[[ "${TEST_FAIL_CLIP:-0}" != 1 ]] || exit 1
+[[ "${TEST_FAIL_CLIP:-0}" != 1 ]] || { echo PRIVATE_SYNTHETIC_CLIP_ERROR >&2; exit 1; }
 tee "$TEST_TMP/clipboard" >/dev/null
 EOF
 cat >"$TMP/bin/notify-send" <<'EOF'
@@ -86,7 +97,7 @@ cat >"$TMP/bin/qdbus" <<'EOF'
 #!/usr/bin/env bash
 [[ "${TEST_UNKNOWN:-0}" != 1 ]] || exit 0
 printf '%s\n' "uuid: ${TEST_UUID:-11111111-1111-1111-1111-111111111111}" \
-  'desktopFile: org.kde.konsole' 'resourceClass: konsole' "caption: ${TEST_CAPTION:-test window}"
+  "desktopFile: ${TEST_DESKTOP_FILE:-org.kde.konsole}" "resourceClass: ${TEST_RESOURCE_CLASS:-konsole}" "caption: ${TEST_CAPTION:-test window}"
 EOF
 chmod +x "$TMP/bin/"*
 export TEST_TMP="$TMP" PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
@@ -118,14 +129,14 @@ run_case() {
   local text="$1" copy="$2" shortcut="$3" backend="${4:-ydotool}"
   export TEST_TEXT="$text"
   printf '%s\n' 'OVERLAY_ENABLED=0' 'SOUND_ENABLED=0' 'INSERT_MODE=type' \
-    "FOCUS_SAFE_MODE=${TEST_FOCUS_SAFE:-0}" "COPY_TO_CLIPBOARD=$copy" "TYPE_BACKEND=$backend" "YDOTOOL_SOCKET_PATH=${TEST_SOCKET_OVERRIDE:-$TMP/runtime/typing.sock}" \
+    "FOCUS_SAFE_MODE=${TEST_FOCUS_SAFE:-0}" "COPY_TO_CLIPBOARD=$copy" "TYPE_BACKEND=$backend" "RECORD_SOURCE=${TEST_SOURCE:-default}" "YDOTOOL_SOCKET_PATH=${TEST_SOCKET_OVERRIDE:-$TMP/runtime/typing.sock}" \
     "PASTE_SHORTCUT=$shortcut" >"$HERMESKEY_CONFIG"
   rm -f "$TMP/clipboard" "$TMP/events" "$TMP/notifications" "$TMP/typed" "$TMP/backend-argv" "$TMP/app-argv"
-  "$ROOT/bin/hermeskey" >/dev/null
+  "$ROOT/bin/hermeskey" >"$TMP/start-output" 2>"$TMP/start-errors"
   if [[ "${TEST_SWITCH_FOCUS:-0}" == 1 ]]; then
     TEST_UUID=22222222-2222-2222-2222-222222222222; export TEST_UUID
   fi
-  "$ROOT/bin/hermeskey" >"$TMP/result"
+  "$ROOT/bin/hermeskey" >"$TMP/result" 2>"$TMP/stop-errors"
   unset TEST_UUID
 }
 
@@ -243,8 +254,53 @@ run_case 'hello123' 0 auto
 grep -q 'focus changed' "$TMP/result"
 unset TEST_FOCUS_SAFE TEST_SWITCH_FOCUS
 
-if grep -qE '你好|Français|Привет|العربية|日本語|ไทย|hello123' "$TMP/state/hermeskey/hermeskey.log"; then
-  echo 'Private transcript leaked to the log' >&2
-  exit 1
-fi
-printf 'Unicode insertion policy tests passed.\n'
+# Emulate the shortcut's captured stdout/stderr (potential journal content)
+# and the local runtime log with fake private app/device/path identifiers.
+TEST_UUID=facefeed-dead-beef-babe-aaaabbbbcccc
+TEST_DESKTOP_FILE=PRIVATE_SYNTHETIC_DESKTOP_ID
+TEST_RESOURCE_CLASS=PRIVATE_SYNTHETIC_RESOURCE_CLASS
+TEST_SOURCE=PRIVATE_SYNTHETIC_MICROPHONE_SOURCE
+TEST_CAPTION=PRIVATE_SYNTHETIC_WINDOW_TITLE
+export TEST_UUID TEST_DESKTOP_FILE TEST_RESOURCE_CLASS TEST_SOURCE TEST_CAPTION
+TEST_FOCUS_SAFE=1 TEST_SWITCH_FOCUS=1; export TEST_FOCUS_SAFE TEST_SWITCH_FOCUS
+run_case 'PRIVATE_SYNTHETIC_TRANSCRIPT_TEXT' 0 auto
+[[ ! -e "$TMP/clipboard" && ! -e "$TMP/events" ]]
+unset TEST_SWITCH_FOCUS TEST_FOCUS_SAFE
+TEST_SERVER_ERROR=1; export TEST_SERVER_ERROR
+run_case 'PRIVATE_SYNTHETIC_TRANSCRIPT_TEXT' 0 auto
+unset TEST_SERVER_ERROR
+TEST_FAIL_TYPE=1; export TEST_FAIL_TYPE
+run_case 'PRIVATE_SYNTHETIC_TRANSCRIPT_TEXT' 0 auto
+unset TEST_FAIL_TYPE
+TEST_FAIL_CLIP=1; export TEST_FAIL_CLIP
+run_case 'PRIVATE_SYNTHETIC_TRANSCRIPT_TEXT' 1 auto
+unset TEST_FAIL_CLIP
+run_case 'PRIVATE_SYNTHETIC_TRANSCRIPT_TEXT' 0 auto PRIVATE_SYNTHETIC_BACKEND_ID
+run_case 'Français été' 1 PRIVATE_SYNTHETIC_SHORTCUT
+# The standalone server fallback must still receive its model/socket settings,
+# but must not persist its raw third-party output or create an unbounded log.
+TEST_REQUIRE_SERVER_READY=1 MODEL=PRIVATE_SYNTHETIC_MODEL_ID
+PYTHON_STT="$TMP/bin/python3" SERVER_SCRIPT="$TMP/hermeskey-server-fake.py"
+export TEST_REQUIRE_SERVER_READY MODEL PYTHON_STT SERVER_SCRIPT
+run_case 'PRIVATE_SYNTHETIC_TRANSCRIPT_TEXT' 0 auto
+[[ -f "$TMP/server-env" && -f "$TMP/server-ready" ]]
+grep -qF 'PRIVATE_SYNTHETIC_MODEL_ID' "$TMP/server-env"
+[[ ! -e "$TMP/state/hermeskey/hermeskey-server.log" ]]
+unset TEST_REQUIRE_SERVER_READY MODEL PYTHON_STT SERVER_SCRIPT
+for private in PRIVATE_SYNTHETIC facefeed-dead-beef-babe-aaaabbbbcccc 'hello123' '你好'; do
+  if grep -qF "$private" "$TMP/state/hermeskey/hermeskey.log" "$TMP/start-output" "$TMP/start-errors" "$TMP/stop-errors" "$TMP/result"; then
+    echo 'Private content or identifying metadata leaked to runtime diagnostics' >&2
+    exit 1
+  fi
+done
+# An old unbounded log is discarded, rather than moved into an unbounded .1.
+head -c 300000 /dev/zero | tr '\0' x >"$TMP/state/hermeskey/hermeskey.log"
+run_case 'hello123' 0 auto
+[[ $(stat -c %s "$TMP/state/hermeskey/hermeskey.log") -le 262144 ]]
+[[ ! -e "$TMP/state/hermeskey/hermeskey.log.1" ]]
+# A normally-sized log keeps at most one bounded backup.
+head -c 262120 /dev/zero | tr '\0' x >"$TMP/state/hermeskey/hermeskey.log"
+run_case 'hello123' 0 auto
+[[ $(stat -c %s "$TMP/state/hermeskey/hermeskey.log") -le 262144 ]]
+[[ $(stat -c %s "$TMP/state/hermeskey/hermeskey.log.1") -le 262144 ]]
+printf 'Unicode insertion and private-log policy tests passed.\n'
