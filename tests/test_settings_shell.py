@@ -250,6 +250,8 @@ class SettingsShellTests(unittest.TestCase):
             self.app.processEvents()
             self.assertTrue(window.privacy_button.isVisible())
             self.assertIn("KDE clipboard history", window.clipboard_hint.text())
+            self.assertIn("clear older history in Klipper", window.clipboard_hint.text())
+            self.assertIn("sync app yourself", window.clipboard_hint.text())
             self.assertTrue(window.privacy_button.isEnabled())
             self.assertFalse(window.clipboard_backup.isEnabled())
             window.privacy_button.click()

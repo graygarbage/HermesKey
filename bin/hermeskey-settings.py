@@ -159,7 +159,7 @@ class SettingsWindow(QMainWindow):
                 self.privacy_button.setObjectName("privacy_button")
                 form.addRow("", self.privacy_button)
                 page_layout.addLayout(form)
-                self.clipboard_hint = QLabel("Clipboard backup is on by default and may remain in KDE clipboard history or sync tools. Privacy-first typing prevents new HermesKey backups but does not clear existing history. Clipboard-only mode always copies; without backup, ydotool cannot insert non-ASCII text. Focus safety needs KDE window detection (check Doctor).")
+                self.clipboard_hint = QLabel("Backup is on by default; KDE clipboard history (Klipper) or sync apps may retain dictated text. Privacy-first typing stops new HermesKey backups; clear older history in Klipper and any sync app yourself. Clipboard-only mode always copies. Without backup, ydotool cannot insert non-ASCII text. Focus safety needs KDE window detection (Doctor).")
                 self.clipboard_hint.setWordWrap(True)
                 page_layout.addWidget(self.clipboard_hint)
                 self.privacy_button.clicked.connect(self.select_privacy_first_typing)
