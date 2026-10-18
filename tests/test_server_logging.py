@@ -36,7 +36,7 @@ class ServerLoggingTests(unittest.TestCase):
             self.assertNotIn(secret, str(reply))
             self.assertNotIn(secret, str(error.call_args))
             self.assertIn("RuntimeError", str(error.call_args))
-            self.assertIn("handle", str(error.call_args))
+            self.assertIn("request", str(error.call_args))
 
     def test_invalid_json_does_not_log_request_body(self):
         secret = "PRIVATE_REQUEST_TEXT"
@@ -61,6 +61,26 @@ class ServerLoggingTests(unittest.TestCase):
         self.assertNotIn(secret, str(error.call_args))
         self.assertIn("OSError", str(error.call_args))
 
+    def test_failure_formatter_omits_custom_class_and_frame_filename(self):
+        secret = "PRIVATE_SYNTHETIC_FILENAME_AND_CLASS"
+        CustomError = type(secret, (RuntimeError,), {})
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / f"{secret}.py"
+            source.write_text(f"raise CustomError('private request: {secret}')\n")
+            try:
+                exec(compile(source.read_text(), str(source), "exec"), {"CustomError": CustomError})
+            except CustomError as exc:
+                with patch.object(server_module.logger, "error") as error:
+                    server_module.log_failure("startup", exc)
+            output = str(error.call_args)
+            self.assertNotIn(secret, output)
+            self.assertNotIn(str(source), output)
+            self.assertIn("RuntimeError", output)
+            with patch.object(server_module.logger, "error") as error:
+                server_module.log_failure(secret, CustomError(secret))
+            self.assertNotIn(secret, str(error.call_args))
+            self.assertIn("unknown", str(error.call_args))
+
     def test_third_party_request_logs_are_not_forwarded(self):
         handler = server_module.logger.handlers[0]
         original = handler.stream
@@ -75,6 +95,27 @@ class ServerLoggingTests(unittest.TestCase):
         self.assertIn("loading speech model", output.getvalue())
         self.assertNotIn("PRIVATE_SYNTHETIC", output.getvalue())
         self.assertIsInstance(logging.getLogger().handlers[0], logging.NullHandler)
+
+    def test_captured_service_diagnostics_omit_private_failure_and_library_messages(self):
+        # The handler writes to the service journal in production; capture its
+        # stream without starting a real user service or touching real journals.
+        secret = "PRIVATE_SYNTHETIC_SOURCE_AND_REQUEST_PATH"
+        handler = server_module.logger.handlers[0]
+        original = handler.stream
+        captured_journal = io.StringIO()
+        try:
+            handler.setStream(captured_journal)
+            server_module.log("loading speech model")
+            logging.getLogger("huggingface_hub").error("remote metadata: %s", secret)
+            logging.getLogger("faster_whisper").error("model load: %s", secret)
+            server_module.log_failure("startup", RuntimeError(secret))
+        finally:
+            handler.setStream(original)
+        output = captured_journal.getvalue()
+        self.assertIn("loading speech model", output)
+        self.assertIn("RuntimeError", output)
+        self.assertNotIn(secret, output)
+        self.assertNotIn("remote metadata", output)
 
     def test_model_load_does_not_log_custom_path(self):
         secret = "PRIVATE_MODEL_FOLDER"

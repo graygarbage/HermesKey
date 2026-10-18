@@ -3,7 +3,6 @@ import argparse
 import json
 import logging
 import os
-import re
 import signal
 import socket
 import stat
@@ -51,22 +50,18 @@ def validate_private_socket(path: str) -> None:
 
 
 def log_failure(stage: str, exc: Exception) -> None:
-    """Log diagnostics, never str(exc), traceback source lines or local variables.
+    """Only fixed stages and built-in error categories reach the service journal.
 
-    Third-party exception messages may contain audio paths or user text. Python's
-    normal traceback formatter includes that message and full source paths too.
+    Exception messages, third-party class names and traceback filenames may
+    contain request text, local model paths or user-chosen source identifiers.
     """
-    def safe(value: str) -> str:
-        return re.sub(r"[^A-Za-z0-9_.-]", "_", value)[:64]
-
-    frames = []
-    tb = exc.__traceback__
-    while tb is not None:
-        code = tb.tb_frame.f_code
-        frames.append(f"{safe(os.path.basename(code.co_filename))}:{tb.tb_lineno}:{safe(code.co_name)}")
-        tb = tb.tb_next
-    location = " <- ".join(frames[-8:]) if frames else "unknown"
-    logger.error("Server %s failed: %s at %s", stage, safe(type(exc).__name__), location)
+    if stage not in {"startup", "request", "client connection", "socket cleanup"}:
+        stage = "unknown"
+    for category in (FileNotFoundError, PermissionError, TimeoutError, json.JSONDecodeError, ValueError, OSError, RuntimeError):
+        if isinstance(exc, category):
+            logger.error("Server %s failed: %s", stage, category.__name__)
+            return
+    logger.error("Server %s failed: other", stage)
 
 
 class Server:

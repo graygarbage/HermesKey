@@ -71,19 +71,26 @@ tail -n 100 ~/.local/state/hermeskey/hermeskey.log
 ```
 
 Doctor shows service readiness but intentionally **omits raw service status and
-journal snippets**: they can include third-party network request URLs, process
-arguments, device names or local paths. The speech server now forwards only its
-own allowlisted diagnostic events from Python logging; it suppresses third-party
-library logging in the service by default. Existing journal history and output
-written directly by other programs may still contain private metadata. Inspect
-logs only on your machine, and carefully redact them before any voluntary sharing.
-Never post audio, transcripts, tokens, window titles, device names or personal
-paths in a public issue. For a security-sensitive problem, follow
-[SECURITY.md](../SECURITY.md); if private reporting is unavailable, request a
-private contact channel without posting details publicly. This logging change
-does **not** prevent a
-model-library metadata request on restart; offline operation is tracked in
-[issue #65](https://github.com/graygarbage/HermesKey/issues/65).
+journal snippets**: they can contain third-party request URLs, process arguments,
+device names or local paths. The hotkey's local log records timestamps and fixed
+status/failure categories, not transcripts, audio sizes, app IDs, window UUIDs,
+device identifiers, user-configured backend names or runtime paths. It rotates at
+256 KiB and retains at most one previous 256 KiB file (`hermeskey.log.1`);
+previously created log files and journal history are not retroactively cleaned.
+Errors from recorder/typing helpers and raw server responses are not appended to
+the hotkey log. The speech service forwards its own allowlisted Python diagnostic
+events and suppresses third-party Python logging by default. **Direct output from
+systemd, native libraries or other programs may still appear in the journal**;
+HermesKey does not control journald retention. Inspect all logs locally and redact
+before sharing. To remove the hotkey's own local log history, delete
+`~/.local/state/hermeskey/hermeskey.log` and `.log.1` on your machine (or use
+your configured `LOG` path); the next hotkey use recreates the current log.
+Never post audio, transcripts, tokens, window titles, device names, personal
+paths or raw journals in a public issue. For a security-sensitive problem,
+follow [SECURITY.md](../SECURITY.md); if private reporting is unavailable,
+request a private contact channel without posting details publicly. To prevent
+model metadata requests on restart, use a preloaded model and opt-in strict
+offline mode as described in [PRIVACY.md](PRIVACY.md).
 
 ## No audio captured
 
