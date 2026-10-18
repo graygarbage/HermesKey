@@ -13,14 +13,19 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck systemd
+          # The Qt bindings are installed for Ubuntu's /usr/bin/python3, not
+          # necessarily the runner's default python3 on PATH.
+          sudo apt-get install -y shellcheck systemd python3-pyside6.qtwidgets qt6-qpa-plugins
           if ! command -v ydotoold >/dev/null 2>&1; then
             sudo install -Dm755 /bin/true /usr/bin/ydotoold
           fi
 
-      - name: Checks (shell syntax, shellcheck, Python syntax, systemd units)
+      - name: Checks (including required offscreen Settings tests)
         env:
           REQUIRE_SHELLCHECK: "1"
+          HERMESKEY_REQUIRE_GUI_TESTS: "1"
+          HERMESKEY_CHECK_PYTHON: /usr/bin/python3
+          QT_QPA_PLATFORM: offscreen
         run: ./scripts/check.sh
 
       - name: Build release archive
