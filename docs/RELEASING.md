@@ -20,7 +20,9 @@ HermesKey releases should feel deliberate:
 - [ ] confirm microphone dictation, Unicode insertion, Settings save/restart, and `hermeskey-doctor` on the test machine
 - [ ] merge release-prep PR; on `main`, pull the merged commit and confirm `VERSION`, changelog date, and release notes before tagging
 - [ ] tag/push the release from the verified `main` commit only (with approval)
-- [ ] verify GitHub Actions published the `.tar.gz` archive and the handwritten release body; confirm the standard installer resolves the new release
+- [ ] verify GitHub Actions published the `.tar.gz` archive and handwritten release body
+- [ ] independently download the published asset, inspect its version/provenance, compute SHA-256 locally, and submit the version + digest to `trusted_release_digest()` in `scripts/bootstrap.sh` for a separate reviewed PR. Do **not** fetch the expected checksum from the same release API response or update it automatically in CI. The default installer intentionally **fails closed** between publication and that reviewed digest merge.
+- [ ] verify a tampered copy aborts before `tar` or `install.sh`, and that the new pinned release installs on a KDE test system. Confirm the standard installer resolves the new release only *after* the digest PR merges. Document a reviewed immutable bootstrap commit for higher-assurance users; the raw-main entrypoint itself is mutable.
 
 ## Helper commands
 

@@ -82,33 +82,44 @@ if [[ "$LOCAL_SOURCE" == 0 ]]; then
   need_cmd curl
   need_cmd tar
   need_cmd mktemp
+  [[ "$CHANNEL" != "release" ]] || need_cmd sha256sum
 fi
 
-latest_asset_url() {
+latest_release_tag() {
   local json
-  json="$(curl -fsSL "$API_URL")"
+  json="$(curl -fsSL --proto '=https' --proto-redir '=https' "$API_URL")"
 
   RELEASE_JSON="$json" python3 - <<'PY'
 import json
 import os
+import re
 
 payload = json.loads(os.environ['RELEASE_JSON'])
-for asset in payload.get('assets', []):
-    url = asset.get('browser_download_url', '')
-    if url.endswith('.tar.gz') and 'hermeskey-' in url:
-        print(url)
-        raise SystemExit(0)
-raise SystemExit(1)
+tag = payload.get('tag_name', '')
+if not isinstance(tag, str) or not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag):
+    raise SystemExit(1)
+name = f"hermeskey-{tag[1:]}.tar.gz"
+if sum(asset.get('name') == name for asset in payload.get('assets', [])) != 1:
+    raise SystemExit(1)
+print(tag)
 PY
 }
 
-download_url() {
-  if [[ "$CHANNEL" == "main" ]]; then
-    printf '%s\n' "$MAIN_TARBALL_URL"
-    return 0
-  fi
+# Reviewed digests live in the bootstrap code, NOT the release API response or
+# another file downloaded next to the archive. Updating this allowlist requires
+# an independent PR after each release asset has been built and inspected.
+trusted_release_digest() {
+  case "$1" in
+    v0.6.3) printf '%s\n' '167bd4336d875af01b115869cb1b8e85baa35fb316d6364f728b7138d499929a' ;;
+    *) return 1 ;;
+  esac
+}
 
-  latest_asset_url || fail "Could not resolve the latest release archive; refusing to install from main. Retry later, or explicitly pass --main if you want untagged code."
+resolve_release() {
+  local tag
+  tag="$(latest_release_tag)" || fail "Could not resolve the latest release archive; refusing to install from main. Retry later, or explicitly pass --main if you want untagged code."
+  EXPECTED_DIGEST="$(trusted_release_digest "$tag")" || fail "Latest release has no reviewed digest; refusing to install it. Wait for a reviewed bootstrap update."
+  ARCHIVE_URL="https://github.com/$REPO/releases/download/$tag/hermeskey-${tag#v}.tar.gz"
 }
 
 setup_python_env() {
@@ -146,13 +157,25 @@ else
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "$TMP_DIR"' EXIT
 
-  ARCHIVE_URL="$(download_url)"
+  if [[ "$CHANNEL" == "main" ]]; then
+    ARCHIVE_URL="$MAIN_TARBALL_URL"
+  else
+    resolve_release
+  fi
   ARCHIVE_PATH="$TMP_DIR/hermeskey.tar.gz"
   EXTRACT_DIR="$TMP_DIR/extract"
 
   step "Downloading HermesKey"
   say "Source: $ARCHIVE_URL"
-  curl -fsSL "$ARCHIVE_URL" -o "$ARCHIVE_PATH"
+  curl -fsSL --proto '=https' --proto-redir '=https' "$ARCHIVE_URL" -o "$ARCHIVE_PATH"
+  if [[ "$CHANNEL" == "release" ]]; then
+    actual_digest="$(sha256sum "$ARCHIVE_PATH")"
+    actual_digest="${actual_digest%% *}"
+    [[ "$actual_digest" == "$EXPECTED_DIGEST" ]] || fail "Release archive digest mismatch; refusing to extract or execute it."
+    ok "Release archive matches reviewed digest"
+  else
+    warn "Explicit --main selected: mutable archive has no pinned release digest."
+  fi
   mkdir -p "$EXTRACT_DIR"
   tar -xzf "$ARCHIVE_PATH" -C "$EXTRACT_DIR"
 
