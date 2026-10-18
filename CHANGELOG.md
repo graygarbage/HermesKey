@@ -6,6 +6,29 @@ All notable changes to HermesKey will be documented in this file.
 
 - TBD
 
+## [0.6.4] - 2026-10-18
+
+Privacy and bootstrap-integrity roll-up of the reviewed changes since v0.6.3. No remote speech inference, translation, tracking, or automatic data upload is added.
+
+### Privacy and security
+
+- add opt-in strict offline speech-model startup (`HERMESKEY_OFFLINE=1`): disable Hugging Face telemetry, set offline mode before model import, and load cached/local models only. Missing models fail without downloading; bootstrap, pip and unrelated apps are not offline (#65)
+- add an explicit Privacy-first typing choice (`INSERT_MODE=type`, `COPY_TO_CLIPBOARD=0`) and warn about KDE clipboard history, sync tools and `ydotool` Unicode limitations. Default clipboard backup remains enabled for reliability; users must clear older clipboard history in Klipper/sync apps themselves (#67)
+- remove app/window/device identifiers, process/runtime paths, audio sizes and transcript lengths from hotkey diagnostics; bound local hotkey logs to a current and one previous 256 KiB file. Suppress raw helper errors and restrict speech-server error logs to fixed stages/categories. Older logs and direct third-party/systemd journal output are not retroactively sanitized (#63)
+- enable private GitHub vulnerability reporting and improve security/support routing; do not publish sensitive reports or raw logs (#64)
+- bootstrap fails closed on release resolution errors instead of silently falling back to mutable `main`. For verified release assets it accepts only reviewed, version-pinned SHA-256 digests before extraction; an unreviewed new release is refused until its digest is added in a separate review. `--main` remains an explicit unpinned opt-in. This does not authenticate a bootstrap script fetched from mutable `main` (#66)
+- pin direct and transitive speech dependencies, including compatible PyAV, and remove implicit pip/wheel upgrades and source builds. The latest v0.6.3 archive's old broad ranges receive a matching reviewed lock override; pinned versions do not provide per-wheel signatures or hashes (#66)
+
+### Fixed
+
+- clarify offline verifier messages and keep the Speech-page offline switch visible when hints wrap (#65)
+- unify installed tools, Settings and both user services on `~/.config/hermeskey/hermeskey.env`, regardless of `XDG_CONFIG_HOME`. Older custom-XDG configs are copied privately and archived; conflicting paths stop upgrades rather than being overwritten. Bootstrap checks custom `PYTHON_STT` without sourcing configs, and refuses upgrades while recording (#57)
+
+### Testing
+
+- CI now requires 19 PySide6 Settings tests to run offscreen, with zero skips, alongside shell fixtures and a clean pinned speech-venv install; failures cannot hide behind an unavailable Qt package (#58)
+- the old “no automated tests” issue is resolved with 70 unit tests plus shell integration checks (#24); release archives contain only tracked files and build reproducibly from a clean commit
+
 ## [0.6.3] - 2026-10-17
 
 Privacy and runtime-state security maintenance release.
