@@ -12,7 +12,7 @@ printf '%s\n' "$*" >>"$TEST_TMP/curl-requests"
 if [[ "${TEST_CURL_MODE:-}" == tampered ]]; then
   if [[ "$*" == *'/releases/latest'* ]]; then
     printf '{"tag_name":"%s","assets":[{"name":"hermeskey-%s.tar.gz","browser_download_url":"https://untrusted.invalid/asset.tar.gz"}]}\n' \
-      "${TEST_TAG:-v0.6.3}" "${TEST_VERSION:-0.6.3}"
+      "${TEST_TAG:-v0.6.4}" "${TEST_VERSION:-0.6.4}"
     exit 0
   fi
   for ((i=1; i<=$#; i++)); do
@@ -75,17 +75,27 @@ if bash "$root/scripts/bootstrap.sh" >"$tmp/output" 2>&1; then
   exit 1
 fi
 grep -q 'Release archive digest mismatch' "$tmp/output"
-grep -q 'releases/download/v0.6.3/hermeskey-0.6.3.tar.gz' "$tmp/curl-requests"
+grep -q 'releases/download/v0.6.4/hermeskey-0.6.4.tar.gz' "$tmp/curl-requests"
 if grep -q 'untrusted.invalid' "$tmp/curl-requests"; then
   echo 'Bootstrap trusted an API-controlled asset URL' >&2
   exit 1
 fi
 [[ ! -e "$tmp/tar-calls" && ! -e "$tmp/systemctl-calls" ]]
 
+# Previously reviewed v0.6.3 remains accepted (but tampering still fails).
+rm "$tmp/curl-requests"
+TEST_TAG=v0.6.3 TEST_VERSION=0.6.3 bash "$root/scripts/bootstrap.sh" >"$tmp/output" 2>&1 && {
+  echo 'Bootstrap accepted a tampered legacy release' >&2
+  exit 1
+}
+grep -q 'Release archive digest mismatch' "$tmp/output"
+grep -q 'releases/download/v0.6.3/hermeskey-0.6.3.tar.gz' "$tmp/curl-requests"
+[[ ! -e "$tmp/tar-calls" && ! -e "$tmp/systemctl-calls" ]]
+
 # A newer published version without a reviewed, pinned digest must fail
 # before downloading an archive, even though the API is reachable.
 rm "$tmp/curl-requests"
-TEST_TAG=v0.6.4 TEST_VERSION=0.6.4 bash "$root/scripts/bootstrap.sh" >"$tmp/output" 2>&1 && {
+TEST_TAG=v0.6.5 TEST_VERSION=0.6.5 bash "$root/scripts/bootstrap.sh" >"$tmp/output" 2>&1 && {
   echo 'Bootstrap accepted an unreviewed release' >&2
   exit 1
 }
