@@ -17,7 +17,16 @@ printf 'unexpected systemctl call\n' >>"$TEST_TMP/systemctl-calls"
 exit 1
 EOF
 chmod +x "$tmp/bin/curl" "$tmp/bin/systemctl"
-export TEST_TMP="$tmp" HOME="$tmp/home" PATH="$tmp/bin:$PATH"
+export TEST_TMP="$tmp" HOME="$tmp/home" PATH="$tmp/bin:$PATH" XDG_RUNTIME_DIR="$tmp/runtime"
+mkdir -p "$XDG_RUNTIME_DIR"
+printf 'synthetic pid state\n' >"$XDG_RUNTIME_DIR/hermeskey_recording.pid"
+if bash "$root/scripts/bootstrap.sh" --main >"$tmp/output" 2>&1; then
+  echo 'Bootstrap continued during active recording' >&2
+  exit 1
+fi
+grep -q 'Finish dictation before upgrading' "$tmp/output"
+[[ ! -e "$tmp/curl-requests" && ! -e "$tmp/systemctl-calls" ]]
+rm "$XDG_RUNTIME_DIR/hermeskey_recording.pid"
 
 if bash "$root/scripts/bootstrap.sh" >"$tmp/output" 2>&1; then
   echo 'Bootstrap succeeded without a release asset' >&2

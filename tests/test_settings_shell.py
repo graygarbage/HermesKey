@@ -34,6 +34,26 @@ class SettingsShellTests(unittest.TestCase):
         with patch.object(self.SettingsWindow, "refresh_sources"):
             return self.SettingsWindow(path)
 
+    def test_default_settings_path_matches_service_with_custom_xdg(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            config = home / ".config/hermeskey/hermeskey.env"
+            config.parent.mkdir(parents=True)
+            config.write_text("MODEL=medium\nSTT_LANG=en\n")
+            with patch.dict(os.environ, {"HOME": str(home), "XDG_CONFIG_HOME": str(Path(directory) / "xdg")}), \
+                 patch.object(Path, "home", return_value=home):
+                window = self.window(None)
+                self.assertEqual(window.path, config)
+                self.assertIsNotNone(window.document)
+                self.assertNotIn("Custom config overrides", window.notice.text())
+                window.model_picker.setCurrentIndex(window.model_picker.findData("tiny"))
+                with patch.object(window, "validate"), \
+                     patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
+                    self.assertTrue(window.save_changes())
+                self.assertIn("MODEL=tiny", config.read_text())
+                self.assertFalse((Path(directory) / "xdg/hermeskey/hermeskey.env").exists())
+                window.close()
+
     def test_speech_page_clarifies_spoken_language_not_translation(self):
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "hermeskey.env"

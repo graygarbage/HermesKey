@@ -217,11 +217,8 @@ class SettingsWindow(QMainWindow):
             self.populate_sources()
             self.refresh_sources()
             self.notice.setText(f"Editing {self.path}. Other settings and comments are preserved.")
-            if path is None and (
-                os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")) != str(Path.home() / ".config")
-                or os.environ.get("HERMESKEY_CONFIG")
-            ):
-                self.notice.setText(self.notice.text() + " Custom config overrides are not used by the systemd service.")
+            if path is None and os.environ.get("HERMESKEY_CONFIG"):
+                self.notice.setText(self.notice.text() + " HERMESKEY_CONFIG only overrides individual CLI commands, not Settings or user services.")
         self.model_picker.currentIndexChanged.connect(self.update_model_control)
         self.language_picker.currentIndexChanged.connect(self.update_language_control)
         self.insert_picker.currentIndexChanged.connect(self.update_insert_mode)

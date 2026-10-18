@@ -19,7 +19,7 @@ class DesktopInstallTests(unittest.TestCase):
         mockbin = Path(self.temp.name) / "mockbin"
         mockbin.mkdir()
         systemctl = mockbin / "systemctl"
-        systemctl.write_text("#!/usr/bin/env sh\nexit 0\n")
+        systemctl.write_text('#!/usr/bin/env sh\nprintf "%s\\n" "$*" >> "$TEST_SYSTEMCTL_LOG"\nexit 0\n')
         systemctl.chmod(0o755)
         xdg_open = mockbin / "xdg-open"
         xdg_open.write_text("#!/usr/bin/env sh\nexit 0\n")
@@ -27,6 +27,8 @@ class DesktopInstallTests(unittest.TestCase):
         self.env = dict(os.environ, HOME=str(self.home),
                         XDG_CONFIG_HOME=str(self.home / ".config"),
                         XDG_DATA_HOME=str(self.home / ".local/share"),
+                        TEST_SYSTEMCTL_LOG=str(Path(self.temp.name) / "systemctl-calls"),
+                        XDG_RUNTIME_DIR=str(Path(self.temp.name) / "runtime"),
                         PATH=f"{mockbin}:{os.environ['PATH']}")
         self.apps = self.home / ".local/share/applications"
 
@@ -80,6 +82,134 @@ class DesktopInstallTests(unittest.TestCase):
         self.assertEqual(target.read_text(), "MODEL=medium\n")
         self.assertEqual(target.stat().st_mode & 0o777, 0o644)
         self.assertFalse((self.home / ".local/bin/hermeskey").exists())
+
+    def test_custom_xdg_fresh_install_uses_single_service_config(self):
+        custom_xdg = Path(self.temp.name) / "private-xdg"
+        self.env["XDG_CONFIG_HOME"] = str(custom_xdg)
+        self.install()
+        canonical = self.home / ".config/hermeskey/hermeskey.env"
+        self.assertTrue(canonical.is_file())
+        self.assertFalse((custom_xdg / "hermeskey/hermeskey.env").exists())
+        self.assertEqual(canonical.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(canonical.parent.stat().st_mode & 0o777, 0o700)
+        venv_python = Path(self.temp.name) / "custom-venv/bin/python"
+        venv_python.parent.mkdir(parents=True)
+        venv_python.write_text("#!/usr/bin/env sh\nexit 0\n")
+        venv_python.chmod(0o755)
+        canonical.write_text(f'MODEL=tiny\nSTT_LANG=fr\nPYTHON_STT="{venv_python}"\n')
+        subprocess.run(["bash", str(ROOT / "scripts/check-config.sh"), str(venv_python.parent.parent)],
+                       env=self.env, capture_output=True, check=True)
+        for unit in ("hermeskey.service", "hermeskey-ydotoold.service"):
+            text = (self.home / ".config/systemd/user" / unit).read_text()
+            self.assertIn("EnvironmentFile=-%h/.config/hermeskey/hermeskey.env", text)
+        hotkey = subprocess.run([str(self.home / ".local/bin/hermeskey"), "--status"],
+                                env=self.env, capture_output=True, text=True, check=True)
+        self.assertIn(str(canonical), hotkey.stdout)
+        self.assertIn("model:     tiny", hotkey.stdout)
+        self.assertIn("language:  fr", hotkey.stdout)
+        doctor = subprocess.run([str(self.home / ".local/bin/hermeskey-doctor"), "--config-only"],
+                                env=self.env, capture_output=True, text=True)
+        self.assertIn("Config file present", doctor.stdout)
+        subprocess.run([str(self.home / ".local/bin/hermeskey-open-config")],
+                       env=self.env, capture_output=True, check=True)
+        self.assertFalse((custom_xdg / "hermeskey/hermeskey.env").exists())
+
+    def test_custom_xdg_upgrade_copies_legacy_once_without_executing_it(self):
+        custom_xdg = Path(self.temp.name) / "private-xdg"
+        self.env["XDG_CONFIG_HOME"] = str(custom_xdg)
+        legacy = custom_xdg / "hermeskey/hermeskey.env"
+        legacy.parent.mkdir(parents=True)
+        legacy.parent.chmod(0o755)
+        marker = Path(self.temp.name) / "never-executed"
+        content = f'MODEL=tiny\nSTT_LANG=fr\nPYTHON_STT="{self.temp.name}/venv/bin/python"\nUNRELATED=$(touch "{marker}")\n'
+        legacy.write_text(content)
+        legacy.chmod(0o644)
+        venv = Path(self.temp.name) / "venv/bin/python"
+        venv.parent.mkdir(parents=True)
+        venv.write_text("#!/usr/bin/env sh\nexit 0\n")
+        venv.chmod(0o755)
+        subprocess.run(["bash", str(ROOT / "scripts/check-config.sh"), str(venv.parent.parent)],
+                       env=self.env, capture_output=True, check=True)
+        self.assertFalse(marker.exists())
+        self.install()
+        canonical = self.home / ".config/hermeskey/hermeskey.env"
+        self.assertEqual(canonical.read_text(), content)
+        archive = legacy.with_name("hermeskey.env.pre-hermeskey-xdg-migration")
+        self.assertFalse(legacy.exists())
+        self.assertEqual(archive.read_text(), content)
+        self.assertEqual(archive.stat().st_mode & 0o777, 0o600)
+        self.assertFalse(marker.exists())
+        self.assertEqual(canonical.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(canonical.parent.stat().st_mode & 0o777, 0o700)
+        canonical.write_text(content + "# future changes\n")
+        self.install()  # no stale XDG file conflicts with future GUI edits
+        self.assertEqual(canonical.read_text(), content + "# future changes\n")
+        self.assertEqual(archive.read_text(), content)
+
+    def test_custom_xdg_conflict_fails_before_install_or_service_restart(self):
+        custom_xdg = Path(self.temp.name) / "private-xdg"
+        self.env["XDG_CONFIG_HOME"] = str(custom_xdg)
+        canonical = self.home / ".config/hermeskey/hermeskey.env"
+        legacy = custom_xdg / "hermeskey/hermeskey.env"
+        canonical.parent.mkdir(parents=True)
+        legacy.parent.mkdir(parents=True)
+        canonical.write_text("MODEL=tiny\n")
+        legacy.write_text("MODEL=medium\n")
+        result = subprocess.run(["bash", str(ROOT / "install.sh")], env=self.env,
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Conflicting canonical and custom-XDG", result.stderr)
+        self.assertEqual(canonical.read_text(), "MODEL=tiny\n")
+        self.assertEqual(legacy.read_text(), "MODEL=medium\n")
+        self.assertFalse((self.home / ".local/bin/hermeskey").exists())
+        self.assertFalse(Path(self.env["TEST_SYSTEMCTL_LOG"]).exists())
+
+    def test_xdg_alias_of_canonical_path_does_not_archive_active_config(self):
+        canonical = self.home / ".config/hermeskey/hermeskey.env"
+        canonical.parent.mkdir(parents=True)
+        canonical.write_text("MODEL=tiny\n")
+        self.env["XDG_CONFIG_HOME"] = f"{self.home}/.config/."
+        self.install()
+        self.assertEqual(canonical.read_text(), "MODEL=tiny\n")
+        self.assertFalse(canonical.with_name("hermeskey.env.pre-hermeskey-xdg-migration").exists())
+
+    def test_custom_xdg_migration_refuses_existing_backup_and_symlink(self):
+        custom_xdg = Path(self.temp.name) / "private-xdg"
+        self.env["XDG_CONFIG_HOME"] = str(custom_xdg)
+        legacy = custom_xdg / "hermeskey/hermeskey.env"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text("MODEL=tiny\n")
+        archive = legacy.with_name("hermeskey.env.pre-hermeskey-xdg-migration")
+        archive.write_text("preserve this backup\n")
+        for unsafe in (False, True):
+            if unsafe:
+                archive.unlink()
+                legacy.unlink()
+                legacy.symlink_to(archive)
+            result = subprocess.run(["bash", str(ROOT / "install.sh")], env=self.env,
+                                    capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((self.home / ".local/bin/hermeskey").exists())
+            self.assertFalse(Path(self.env["TEST_SYSTEMCTL_LOG"]).exists())
+            if not unsafe:
+                self.assertEqual(archive.read_text(), "preserve this backup\n")
+        self.assertFalse(archive.exists())
+
+    def test_upgrade_refuses_active_dictation_before_changing_files(self):
+        self.install()
+        calls = Path(self.env["TEST_SYSTEMCTL_LOG"])
+        previous_calls = calls.read_text()
+        installed = self.home / ".local/bin/hermeskey"
+        previous_binary = installed.read_bytes()
+        runtime = Path(self.env["XDG_RUNTIME_DIR"])
+        runtime.mkdir()
+        (runtime / "hermeskey_recording.pid").write_text("synthetic-state")
+        result = subprocess.run(["bash", str(ROOT / "install.sh")], env=self.env,
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Finish dictation", result.stderr)
+        self.assertEqual(installed.read_bytes(), previous_binary)
+        self.assertEqual(calls.read_text(), previous_calls)
 
     def test_fresh_install_and_upgrade_hide_legacy_entries(self):
         self.install()

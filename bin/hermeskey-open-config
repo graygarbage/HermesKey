@@ -2,7 +2,8 @@
 set -euo pipefail
 umask 077
 
-CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/hermeskey/hermeskey.env"
+# Open the same canonical file as Settings and the user services.
+CONFIG_PATH="$HOME/.config/hermeskey/hermeskey.env"
 CONFIG_DIR="$(dirname -- "$CONFIG_PATH")"
 if [[ -L "$CONFIG_DIR" || -L "$CONFIG_PATH" ]]; then
   printf 'Refusing symlinked HermesKey config path; inspect it manually.\n' >&2
