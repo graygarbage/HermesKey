@@ -9,7 +9,9 @@ SYSTEMD_DEST="$HOME/.config/systemd/user"
 SHARE_DEST_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 APPLICATIONS_DEST="$SHARE_DEST_DIR/applications"
 METADATA_DEST="$SHARE_DEST_DIR/metainfo"
-CONFIG_DEST_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$APP_ID"
+# The user services use %h/.config and do not inherit XDG_CONFIG_HOME.
+# Keep one canonical config for all installed entry points.
+CONFIG_DEST_DIR="$HOME/.config/$APP_ID"
 DATA_DEST_DIR="$SHARE_DEST_DIR/$APP_ID"
 ICON_THEME_DIR="$SHARE_DEST_DIR/icons/hicolor"
 ICON_DEST="$ICON_THEME_DIR/scalable/apps"
@@ -36,16 +38,63 @@ warn_if_missing notify-send
 warn_if_missing ydotool
 warn_if_missing paplay
 
-# A config file may later hold private model paths or credentials. Do not
-# follow links to an unrelated config directory/file or briefly create a
-# world-readable copy, even on first install with a permissive umask.
-if [[ -L "$CONFIG_DEST_DIR" || -L "$CONFIG_DEST" ]]; then
-  printf 'Refusing symlinked HermesKey config path; inspect %s before installing.\n' "$CONFIG_DEST_DIR" >&2
+# A running recording must be stopped by the user before files/services change.
+# Do not toggle it here: stopping automatically could copy private text.
+if [[ -f "${XDG_RUNTIME_DIR:-/run/user/$UID}/hermeskey_recording.pid" ]]; then
+  printf 'Finish dictation before installing; a recording is in progress.\n' >&2
   exit 1
 fi
+
+# Do not follow links to a different config directory/file during comparison
+# or installation, even if the link points to another private file.
+if [[ -L "$CONFIG_DEST_DIR" || -L "$CONFIG_DEST" ]]; then
+  printf 'Refusing symlinked HermesKey config path; inspect it privately.\n' >&2
+  exit 1
+fi
+
+# Upgrade an older custom-XDG installation only if there is no conflicting
+# canonical file. Read/copy bytes only; never source a legacy config here.
+LEGACY_CONFIG=""
+LEGACY_ARCHIVE=""
+if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+  [[ "$XDG_CONFIG_HOME" == /* ]] || { printf 'XDG_CONFIG_HOME must be absolute.\n' >&2; exit 1; }
+  candidate="${XDG_CONFIG_HOME%/}/$APP_ID/hermeskey.env"
+  if [[ "$candidate" != "$CONFIG_DEST" && ! "$candidate" -ef "$CONFIG_DEST" ]]; then
+    if [[ -L "$XDG_CONFIG_HOME" || -L "${candidate%/*}" || -L "$candidate" ]]; then
+      printf 'Refusing symlinked legacy HermesKey config; inspect it manually.\n' >&2
+      exit 1
+    fi
+    if [[ -e "$candidate" ]]; then
+      [[ -f "$candidate" ]] || { printf 'Invalid legacy HermesKey config.\n' >&2; exit 1; }
+      LEGACY_CONFIG="$candidate"
+      LEGACY_ARCHIVE="$candidate.pre-hermeskey-xdg-migration"
+      if [[ -e "$LEGACY_ARCHIVE" || -L "$LEGACY_ARCHIVE" ]]; then
+        printf 'Legacy HermesKey migration backup already exists; inspect both configs before upgrading.\n' >&2
+        exit 1
+      fi
+      if [[ -e "$CONFIG_DEST" ]] && ! cmp -s -- "$CONFIG_DEST" "$LEGACY_CONFIG"; then
+        printf 'Conflicting canonical and custom-XDG HermesKey configs; choose one before upgrading. Neither was modified.\n' >&2
+        exit 1
+      fi
+    fi
+  fi
+fi
+
+# Private from creation, even on first install with a permissive umask.
 mkdir -p "$CONFIG_DEST_DIR"
 [[ -d "$CONFIG_DEST_DIR" && ! -L "$CONFIG_DEST_DIR" ]] || { printf 'Invalid HermesKey config directory.\n' >&2; exit 1; }
 chmod 0700 "$CONFIG_DEST_DIR"
+if [[ -n "$LEGACY_CONFIG" ]]; then
+  if [[ ! -e "$CONFIG_DEST" ]]; then
+    install -m 0600 -- "$LEGACY_CONFIG" "$CONFIG_DEST"
+  fi
+  # Archive the old path so subsequent GUI edits and upgrades cannot disagree
+  # with a stale custom-XDG file. Do not discard its contents or expose a
+  # previously world-readable legacy config through its backup.
+  chmod 0600 "$LEGACY_CONFIG"
+  mv -- "$LEGACY_CONFIG" "$LEGACY_ARCHIVE"
+  printf 'Migrated custom-XDG HermesKey config to the service path; private legacy backup retained.\n'
+fi
 if [[ -e "$CONFIG_DEST" ]]; then
   [[ -f "$CONFIG_DEST" ]] || { printf 'Invalid HermesKey config file.\n' >&2; exit 1; }
   chmod 0600 "$CONFIG_DEST"

@@ -133,6 +133,12 @@ setup_python_env() {
 
 banner
 
+# Dependency updates and service restarts must not interrupt an active
+# dictation. Never stop it automatically (that could insert or copy text).
+if [[ -f "${XDG_RUNTIME_DIR:-/run/user/$UID}/hermeskey_recording.pid" ]]; then
+  fail "Finish dictation before upgrading; recording is active."
+fi
+
 if [[ "$LOCAL_SOURCE" == 1 ]]; then
   ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
   step "Using checkout at $ROOT"

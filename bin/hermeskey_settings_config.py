@@ -1,6 +1,6 @@
 """Small, non-executing editor for GUI-managed .env settings.
 
-The shell hotkey and systemd both consume ~/.config/hermeskey/hermeskey.env.
+Settings, the installed hotkey and both user services use ~/.config/hermeskey/hermeskey.env.
 Everything we do not understand is left intact, not parsed or evaluated.
 """
 import fcntl
@@ -38,7 +38,7 @@ class ConfigChanged(ConfigError):
 
 
 def canonical_path() -> Path:
-    # systemd's EnvironmentFile uses %h/.config, not XDG_CONFIG_HOME.
+    # systemd's EnvironmentFile uses %h/.config, regardless of XDG_CONFIG_HOME.
     return Path.home() / ".config/hermeskey/hermeskey.env"
 
 
