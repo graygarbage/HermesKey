@@ -85,7 +85,9 @@ Bootstrap exits with an error if validation fails **after** installing files; ru
 curl -fsSL https://raw.githubusercontent.com/graygarbage/HermesKey/main/scripts/bootstrap.sh | bash
 ```
 
-The standard command selects the latest published release. If GitHub's release API is unavailable or the archive cannot be resolved, bootstrap **stops without installing** rather than silently substituting untagged `main` code. Retry later, or consciously opt into the current `main` branch instead:
+The standard command selects the latest published release only if its exact archive SHA-256 is pinned in the reviewed bootstrap code. It **compares the downloaded archive before extracting or executing it** and stops on a mismatch, an unreviewed new release, an API error, or a missing asset; a checksum supplied only by the same release API would not provide this check. The expected digest is separate from the release response, but the `curl | bash` entrypoint itself still comes from **mutable `main`**: a compromise of that source could replace both script and digest. For stronger source pinning, save and review `scripts/bootstrap.sh` from a specific full Git commit you trust, then run that saved script locally. It will only install versions whose digests are embedded in that commit. This is not a signature or a guarantee against a compromised bootstrap source.
+
+Bootstrap requires network access to GitHub for the release metadata and archive, PyPI for pinned Python packages when venv setup is enabled, and Hugging Face for model acquisition unless strict offline speech startup is enabled with a cached/local model. HermesKey sends no audio or transcripts to those setup endpoints. Retry later if bootstrap cannot resolve a reviewed release, or consciously opt into unverified, mutable `main` code instead:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/graygarbage/HermesKey/main/scripts/bootstrap.sh | bash -s -- --main

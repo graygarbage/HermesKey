@@ -35,6 +35,8 @@ It keeps `faster-whisper` warm in a background service and sends the transcript 
 curl -fsSL https://raw.githubusercontent.com/graygarbage/HermesKey/main/scripts/bootstrap.sh | bash
 ```
 
+The bootstrap script checks a reviewed, version-pinned archive SHA-256 **before extraction** and refuses a release without a pinned digest. The script itself is fetched from mutable `main`, so this does not authenticate a compromised bootstrap script. [Install notes](docs/INSTALL.md) explain how to use an immutable reviewed commit instead. No transcript/audio is sent by setup.
+
 Install from `main` instead of the latest tagged release:
 
 ```bash
